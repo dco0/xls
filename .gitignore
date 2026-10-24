@@ -1,6 +1,7 @@
 
 /*
 !/src
+!/c
 !/docs
 !/.gitignore
 !/README.md
@@ -11,3 +12,4 @@
 !/install
 !/update
 !/build
+!/.clangd

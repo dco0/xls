@@ -70,7 +70,7 @@ This search will find the domino in B/S1e:
 max_states = 2
 
 [GRAPH]
-var_count = 10
+var_count = 2
 func_count = 1
 clause_count = 12
 funcs: 1
