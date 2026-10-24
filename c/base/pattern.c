@@ -19,7 +19,7 @@ typedef struct Pattern {
     Cell* data;
 } Pattern;
 
-static const Pattern EMPTY_DYNAMIC_GRID = {
+static const Pattern EMPTY_PATTERN = {
     .used = false,
     .width = 0,
     .height = 0,
@@ -27,8 +27,8 @@ static const Pattern EMPTY_DYNAMIC_GRID = {
     .data = NULL,
 };
 
-#define p_index(p, t, x, y) (((p)->data)[((((t) * (p)->height) + (y)) * (p)->width) + (x)])
-#define direct_p_index(p, t, x, y) (((p).data)[((((t) * (p).height) + (y)) * (p).width) + (x)])
+#define internal_p_get(p, t, x, y) (p)->data[((((t) * (p)->height) + (y)) * (p)->width) + (x)]
+#define p_get(p, t, x, y) internal_p_get(_Generic((p), Pattern*: (p), const Pattern*: (p), Pattern: &(p)), t, x, y)
 
 static void p_destroy(Pattern* p) {
     if (p->used) {
@@ -49,14 +49,6 @@ static void p_init(Pattern* p, size_t width, size_t height, size_t gens) {
     p->data = safe_malloc(width * height * gens * sizeof(Cell));
 }
 
-static inline Cell p_get(const Pattern* p, size_t t, size_t x, size_t y) {
-    return p_index(p, t, x, y);
-}
-
-static inline void p_set(Pattern* p, size_t t, size_t x, size_t y, Cell value) {
-    p_index(p, t, x, y) = value;
-}
-
 
 static bool p_eq(const Pattern* x, const Pattern* y) {
     if (x->width != y->width || x->height != y->height || x->gens != y->gens) {
@@ -65,7 +57,7 @@ static bool p_eq(const Pattern* x, const Pattern* y) {
     for (size_t t = 0; t < x->gens; t++) {
         for (size_t yi = 0; yi < x->height; yi++) {
             for (size_t xi = 0; xi < x->width; xi++) {
-                if (p_index(x, t, xi, yi) != p_index(y, t, xi, yi)) {
+                if (p_get(x, t, xi, yi) != p_get(y, t, xi, yi)) {
                     return false;
                 }
             }
@@ -79,7 +71,7 @@ static void p_copy(Pattern* out, Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, x, y) = p_index(p, t, x, y);
+                p_get(out, t, x, y) = p_get(p, t, x, y);
             }
         }
     }
@@ -90,7 +82,7 @@ static void p_flip_horizontal(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, p->width - x - 1, y) = p_index(p, t, x, y);
+                p_get(out, t, p->width - x - 1, y) = p_get(p, t, x, y);
             }
         }
     }
@@ -101,7 +93,7 @@ static void p_flip_vertical(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, x, p->height - y - 1) = p_index(p, t, x, y);
+                p_get(out, t, x, p->height - y - 1) = p_get(p, t, x, y);
             }
         }
     }
@@ -112,7 +104,7 @@ static void p_rotate_left(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, p->height - y - 1, x) = p_index(p, t, x, y);
+                p_get(out, t, p->height - y - 1, x) = p_get(p, t, x, y);
             }
         }
     }
@@ -124,7 +116,7 @@ static void p_rotate_right(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, y, p->width - x - 1) = p_index(p, t, x, y);
+                p_get(out, t, y, p->width - x - 1) = p_get(p, t, x, y);
             }
         }
     }
@@ -135,7 +127,7 @@ static void p_rotate_180(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, p->width - x - 1, p->height - y - 1) = p_index(p, t, x, y);
+                p_get(out, t, p->width - x - 1, p->height - y - 1) = p_get(p, t, x, y);
             }
         }
     }
@@ -146,7 +138,7 @@ static void p_flip_diagonal(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, y, x) = p_index(p, t, x, y);
+                p_get(out, t, y, x) = p_get(p, t, x, y);
             }
         }
     }
@@ -157,7 +149,7 @@ static void p_flip_anti_diagonal(Pattern* out, const Pattern* p) {
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
             for (size_t x = 0; x < p->width; x++) {
-                p_index(out, t, p->height - y - 1, p->width - x - 1) = p_index(p, t, x, y);
+                p_get(out, t, p->height - y - 1, p->width - x - 1) = p_get(p, t, x, y);
             }
         }
     }
@@ -167,7 +159,7 @@ static void p_extract_gen(Pattern* out, const Pattern* p, size_t t) {
     p_init(out, p->width, p->height, 1);
     for (size_t y = 0; y < p->height; y++) {
         for (size_t x = 0; x < p->width; x++) {
-            p_index(out, 0, x, y) = p_index(p, t, x, y);
+            p_get(out, 0, x, y) = p_get(p, t, x, y);
         }
     }
 }
@@ -180,7 +172,7 @@ static void p_shrink(Pattern* out, const Pattern* p, size_t top, size_t bottom, 
     for (size_t t = 0; t < out->gens; t++) {
         for (size_t y = 0; y < out->height; y++) {
             for (size_t x = 0; x < out->width; x++) {
-                p_index(out, t, x, y) = p_index(p, t + start, x + left, y + top);
+                p_get(out, t, x, y) = p_get(p, t + start, x + left, y + top);
             }
         }
     }
@@ -197,7 +189,7 @@ static ShrinkToFitOffsets p_shrink_to_fit(Pattern* out, const Pattern* p) {
         bool found = false;
         for (size_t x = 0; x < p->width; x++) {
             for (size_t t = 0; t < p->gens; t++) {
-                if (p_get(p, t, x, y) != OFF) {
+                if (p_get(p, t, x, y) != C_OFF) {
                     found = true;
                     break;
                 }
@@ -217,7 +209,7 @@ static ShrinkToFitOffsets p_shrink_to_fit(Pattern* out, const Pattern* p) {
         bool found = false;
         for (size_t x = 0; x < p->width; x++) {
             for (size_t t = 0; t < p->gens; t++) {
-                if (p_get(p, t, x, y - 1) != OFF) {
+                if (p_get(p, t, x, y - 1) != C_OFF) {
                     found = true;
                     break;
                 }
@@ -237,7 +229,7 @@ static ShrinkToFitOffsets p_shrink_to_fit(Pattern* out, const Pattern* p) {
         bool found = false;
         for (size_t y = 0; y < p->height; y++) {
             for (size_t t = 0; t < p->gens; t++) {
-                if (p_get(p, t, x, y) != OFF) {
+                if (p_get(p, t, x, y) != C_OFF) {
                     found = true;
                     break;
                 }
@@ -257,7 +249,7 @@ static ShrinkToFitOffsets p_shrink_to_fit(Pattern* out, const Pattern* p) {
         bool found = false;
         for (size_t y = 0; y < p->height; y++) {
             for (size_t t = 0; t < p->gens; t++) {
-                if (p_get(p, t, x - 1, y) != OFF) {
+                if (p_get(p, t, x - 1, y) != C_OFF) {
                     found = true;
                     break;
                 }
@@ -279,7 +271,7 @@ static ShrinkToFitOffsets p_shrink_to_fit(Pattern* out, const Pattern* p) {
 
 static Transformations p_get_identity_transforms(const Pattern* p) {
     Transformations out;
-    Pattern temp = EMPTY_DYNAMIC_GRID;
+    Pattern temp = EMPTY_PATTERN;
     p_flip_horizontal(&temp, p);
     if (p_eq(p, &temp)) {
         out.flip_horizontal = true;

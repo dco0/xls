@@ -96,9 +96,9 @@ static void safe_free(void* ptr) {
 // core type definitions
 
 typedef uint64_t Cell;
-#define OFF 0
-#define ON 1
-#define is_var(cell) ((cell) > 1)
+#define C_OFF 0
+#define C_ON 1
+#define c_is_var(cell) ((cell) > 1)
 
 
 // symmetries and symmetry transformations
