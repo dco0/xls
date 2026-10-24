@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+pushd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" > /dev/null
+
+git clone https://github.com/speedydelete/lifeweb
+pushd lifeweb > /dev/null
+./install
+popd > /dev/null
+
+npm install
+npx tsc -b
+./build
+
+popd > /dev/null

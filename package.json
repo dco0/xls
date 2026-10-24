@@ -1,0 +1,13 @@
+{
+    "name": "xls",
+    "version": "1.0.0",
+    "type": "module",
+    "files": [
+        "src",
+        "lib"
+    ],
+    "devDependencies": {
+        "@types/node": "^26.6.5",
+        "typescript": "^7.0.2"
+    }
+}
