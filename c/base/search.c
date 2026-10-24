@@ -15,16 +15,26 @@ typedef int VarValue;
 #define V_OFF 1
 #define V_ON 2
 
+typedef struct Clause Clause;
+
+typedef struct VarUse {
+    Clause* clause;
+    // for VLS backend trust me it needs it for the preprocessor too
+    int64_t change;
+} VarUse;
+
 typedef struct Variable {
     size_t number;
     VarValue value;
     size_t use_count;
+    VarUse uses[];
 } Variable;
 
 typedef struct Clause {
     size_t number;
     bool removed;
     ClauseFunc* func;
+    // for VLS backend trust me it needs it for the preprocessor too
     uint64_t* implication_pointer;
     size_t var_count;
     Variable* vars[];
