@@ -10,10 +10,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "params.h"
+
 
 // debugging
-
-#define DEBUG_LEVEL 6
 
 #define debug(level, code) if (DEBUG_LEVEL >= (level)) { code ; }
 

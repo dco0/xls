@@ -4,17 +4,12 @@
 #pragma once
 
 #include <stddef.h>
-#include <inttypes.h>
 
 #include "base.c"
 
 
 
-
-static inline bool dc_eq(Cell x, Cell y) {
-    return x == y;
-}
-
+// TODO: better allocation for this stuff
 
 typedef struct Pattern {
     bool used;
@@ -70,7 +65,7 @@ static bool p_eq(const Pattern* x, const Pattern* y) {
     for (size_t t = 0; t < x->gens; t++) {
         for (size_t yi = 0; yi < x->height; yi++) {
             for (size_t xi = 0; xi < x->width; xi++) {
-                if (!dc_eq(p_index(x, t, xi, yi), p_index(y, t, xi, yi))) {
+                if (p_index(x, t, xi, yi) != p_index(y, t, xi, yi)) {
                     return false;
                 }
             }
