@@ -27,7 +27,7 @@ export function coord(t: number, x: number, y: number): Coord {
 
 export class Grid {
 
-    readonly ulp: ULP;
+    readonly search: Search;
 
     width: number = 0;
     height: number = 0;
@@ -35,12 +35,12 @@ export class Grid {
 
     data: Cell[][][] = [];
 
-    constructor(ulp: ULP) {
-        this.ulp = ulp;
+    constructor(search: Search) {
+        this.search = search;
     }
 
-    copy(ulp?: ULP): Grid {
-        let out = new Grid(ulp ?? this.ulp);
+    copy(search?: Search): Grid {
+        let out = new Grid(search ?? this.search);
         out.width = this.width;
         out.height = this.height;
         out.gens = this.gens;
@@ -324,14 +324,14 @@ export class Grid {
 
 export class Options {
 
-    readonly ulp: ULP;
+    readonly search: Search;
 
-    constructor(ulp: ULP) {
-        this.ulp = ulp;
+    constructor(search: Search) {
+        this.search = search;
     }
 
-    copy(ulp?: ULP): Options {
-        let out = new Options(ulp ?? this.ulp);
+    copy(search?: Search): Options {
+        let out = new Options(search ?? this.search);
         return out;
     }
 
@@ -340,20 +340,20 @@ export class Options {
 
 export class LookupTableClauseFunc {
 
-    readonly ulp: ULP;
+    readonly search: Search;
 
     varCount: number;
     data: number[];
 
-    constructor(ulp: ULP, varCount: number) {
-        this.ulp = ulp;
+    constructor(search: Search, varCount: number) {
+        this.search = search;
         this.varCount = varCount;
-        this.data = new Array(ulp.maxStates ** varCount);
+        this.data = new Array(search.maxStates ** varCount);
         this.data.fill(0);
     }
     
-    copy(ulp?: ULP): LookupTableClauseFunc {
-        let out = new LookupTableClauseFunc(ulp ?? this.ulp, this.varCount);
+    copy(search?: Search): LookupTableClauseFunc {
+        let out = new LookupTableClauseFunc(search ?? this.search, this.varCount);
         out.data = structuredClone(this.data);
         return out;
     }
@@ -366,26 +366,26 @@ export type ClauseFunc = LookupTableClauseFunc;
 
 export class Clause {
     
-    readonly ulp: ULP;
+    readonly search: Search;
 
     func: ClauseFunc;
     data: number[];
 
-    constructor(ulp: ULP, func: ClauseFunc, data: number[]) {
-        this.ulp = ulp;
+    constructor(search: Search, func: ClauseFunc, data: number[]) {
+        this.search = search;
         this.func = func;
         this.data = data;
     }
 
-    copy(ulp?: ULP, func?: LookupTableClauseFunc): Clause {
-        let out = new Clause(ulp ?? this.ulp, func ?? this.func, structuredClone(this.data));
+    copy(search?: Search, func?: LookupTableClauseFunc): Clause {
+        let out = new Clause(search ?? this.search, func ?? this.func, structuredClone(this.data));
         return out;
     }
 
 }
 
 
-export class ULP {
+export class Search {
 
     readonly maxStates: number;
 
@@ -404,8 +404,8 @@ export class ULP {
         this.options = new Options(this);
     }
 
-    copy(): ULP {
-        let out = new ULP(this.maxStates);
+    copy(): Search {
+        let out = new Search(this.maxStates);
         let funcMap = new Map<ClauseFunc, ClauseFunc>();
         for (let func of this.funcs) {
             let copied = func.copy(out);

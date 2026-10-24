@@ -1,3 +1,10 @@
 
 CompileFlags:
-    Add: [-xc, -std=c23, -Wall, -Werror, -Wpedantic, -Wextra]
+    Add: [
+        -xc, -std=c23, -Wall, -Werror, -Wpedantic, -Wextra,
+        -Wno-unused-variable, -Wno-unused-function
+    ]
+
+Diagnostics:
+    UnusedIncludes: Strict
+    MissingIncludes: Strict
