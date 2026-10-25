@@ -255,7 +255,7 @@ static Hash p_hash_full(const Pattern* p) {
         add_hash(flip_anti_diagonal, -dy, -dx);
         #undef add_hash
     } else {
-        out = p_symmetryhash_all_times(p);
+        out = p_hash_all_times(p);
         #define add_hash(transform) \
             if (transforms.transform) { \
                 p_##transform(&temp, p); \
