@@ -61,7 +61,9 @@ typedef struct Clause {
 } Clause;
 
 
-typedef struct ULP {
+typedef struct Search {
+
+    bool multi_rule;
 
     uint64_t max_states;
 
@@ -85,11 +87,12 @@ typedef struct ULP {
 
     } options;
 
-} ULP;
-static ULP s;
+} Search;
+
+static Search s;
 
 
-static void normalize_search_grid(void) {
+static void s_sync_search_grid(void) {
     for (size_t t = 0; t < s.grid.gens; t++) {
         for (size_t y = 0; y < s.grid.height; y++) {
             for (size_t x = 0; x < s.grid.width; x++) {

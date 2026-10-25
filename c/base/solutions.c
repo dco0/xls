@@ -21,7 +21,7 @@ static void print_p_pretty(const Pattern* p, bool is_solution) {
     char rule[MAX_UNPARSED_RULE_LENGTH];
     memset(rule, '\0', 256);
     get_rule(rule, false);
-    if (state.multi_rule) {
+    if (s.multi_rule) {
         char maxrule[MAX_UNPARSED_RULE_LENGTH];
         memset(maxrule, '\0', 256);
         get_rule(maxrule, true);
