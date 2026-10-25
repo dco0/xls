@@ -240,11 +240,11 @@ static Hash p_hash_full(const Pattern* p) {
     if (config.periodic) {
         intmax_t dx = config.periodic_dx;
         intmax_t dy = config.periodic_dy;
-        out = hash_all_times_periodic(p, dx, dy);
+        out = p_hash_all_times_periodic(p, dx, dy);
         #define add_hash(transform, dx, dy) \
             if (transforms.transform) { \
                 p_##transform(&temp, p); \
-                out = min_hash(out, hash_all_times_periodic(&temp, (dx), (dy))); \
+                out = min_hash(out, p_hash_all_times_periodic(&temp, (dx), (dy))); \
             }
         add_hash(flip_horizontal, -dx, dy);
         add_hash(flip_vertical, dx, -dy);
@@ -255,11 +255,11 @@ static Hash p_hash_full(const Pattern* p) {
         add_hash(flip_anti_diagonal, -dy, -dx);
         #undef add_hash
     } else {
-        out = hash_all_times(p);
+        out = p_symmetryhash_all_times(p);
         #define add_hash(transform) \
             if (transforms.transform) { \
                 p_##transform(&temp, p); \
-                out = min_hash(out, hash_all_times(&temp)); \
+                out = min_hash(out, p_hash_all_times(&temp)); \
             }
         add_hash(flip_horizontal);
         add_hash(flip_vertical);
