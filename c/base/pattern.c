@@ -24,12 +24,7 @@ static const Pattern EMPTY_PATTERN = {
     .data = NULL,
 };
 
-#define internal_p_get(p, t, x, y) (p)->data[((((t) * (p)->height) + (y)) * (p)->width) + (x)]
-#ifdef __cplusplus
-#define p_get(p, t, x, y) internal_p_get(p, t, x, y)
-#else
-#define p_get(p, t, x, y) internal_p_get(_Generic((p), Pattern*: (p), const Pattern*: (p), Pattern: &(p)), t, x, y)
-#endif
+#define p_get(p, t, x, y) (p)->data[((((t) * (p)->height) + (y)) * (p)->width) + (x)]
 
 static void p_destroy(Pattern* p) {
     if (p->used) {
