@@ -6,7 +6,6 @@
 #include "base.c"
 
 
-
 // TODO: better allocation for this stuff
 
 typedef struct Pattern {
