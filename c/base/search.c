@@ -10,10 +10,28 @@
 #include "pattern.c"
 
 
-typedef int VarValue;
-#define V_UNKNOWN 0
-#define V_OFF 1
-#define V_ON 2
+typedef struct LookupTableClauseFunc {
+    size_t vars;
+    Cell data[];
+} LookupTableClauseFunc;
+
+typedef enum ClauseFuncType {
+    CFT_LOOKUP_TABLE,
+} ClauseFuncType;
+
+typedef struct ClauseFunc {
+    int type;
+    union {
+        // error: 'data' may not be nested in a struct due to flexible array member
+        LookupTableClauseFunc lookup_table;
+    } data;
+} ClauseFunc;
+
+typedef enum VarValue {
+    V_UNKNOWN = 0,
+    V_OFF = 1,
+    V_ON = 2,
+} VarValue;
 
 typedef struct Clause Clause;
 

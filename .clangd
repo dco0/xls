@@ -2,7 +2,7 @@
 CompileFlags:
     Add: [
         -xc, -std=c23, -Wall, -Werror, -Wpedantic, -Wextra,
-        -Wno-unused-variable, -Wno-unused-function
+        -Wno-unused-variable, -Wno-unused-function, -Wno-flexible-array-extensions
     ]
 
 Diagnostics:
