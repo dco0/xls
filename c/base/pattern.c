@@ -1,6 +1,4 @@
 
-// defines the pattern type for storing and manipulating dynamically allocated patterns
-
 #pragma once
 
 #include <stddef.h>

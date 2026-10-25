@@ -1,6 +1,4 @@
 
-// defines compile time parameters
-
 #pragma once
 
 // transitive includes for older compilers

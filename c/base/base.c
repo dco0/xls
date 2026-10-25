@@ -1,6 +1,4 @@
 
-// defines core base stuff
-
 #pragma once
 
 #include <stddef.h>

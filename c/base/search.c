@@ -1,6 +1,4 @@
 
-// defines types for holding and loading the search from ULP
-
 #pragma once
 
 #include <stddef.h>

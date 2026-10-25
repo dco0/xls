@@ -1,6 +1,4 @@
 
-// defines functions for checking and reporting solutions
-
 #pragma once
 
 #include <stdint.h>
