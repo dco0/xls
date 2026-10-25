@@ -9,6 +9,7 @@
 
 #include "base.c"
 #include "pattern.c"
+#include "search.c"
 
 
 // PLACEHOLDERS
@@ -198,8 +199,8 @@ static Hash p_hash_all_times_periodic_with_offset(const Pattern* p, size_t offse
     ShrinkToFitOffsets offsets = p_shrink_to_fit(&t_p, &full_t_p);
     size_t x_offset_0 = offsets.x;
     size_t y_offset_0 = offsets.y;
-    for (size_t fake_t = 0; fake_t < config.periodic_period; fake_t++) {
-        size_t real_t = (fake_t + offset) % config.periodic_period;
+    for (size_t fake_t = 0; fake_t < s.options.periodic_period; fake_t++) {
+        size_t real_t = (fake_t + offset) % s.options.periodic_period;
         p_extract_gen(&full_t_p, p, real_t);
         ShrinkToFitOffsets offsets = p_shrink_to_fit(&t_p, &full_t_p);
         intmax_t x_offset = (intmax_t)offsets.x - (intmax_t)x_offset_0;
@@ -224,7 +225,7 @@ static Hash p_hash_all_times_periodic_with_offset(const Pattern* p, size_t offse
 
 static Hash p_hash_all_times_periodic(const Pattern* p, size_t dx, size_t dy) {
     Hash out = MAX_HASH;
-    for (size_t offset = 0; offset < config.periodic_period; offset++) {
+    for (size_t offset = 0; offset < s.options.periodic_period; offset++) {
         out = min_hash(out, p_hash_all_times_periodic_with_offset(p, offset, dx, dy));
     }
     return out;
@@ -237,9 +238,9 @@ static Hash p_hash_full(const Pattern* p) {
     Transformations transforms = static_symmetry_to_transforms(symmetry);
     Pattern temp = EMPTY_PATTERN;
     Hash out;
-    if (config.periodic) {
-        intmax_t dx = config.periodic_dx;
-        intmax_t dy = config.periodic_dy;
+    if (s.options.periodic) {
+        intmax_t dx = s.options.periodic_dx;
+        intmax_t dy = s.options.periodic_dy;
         out = p_hash_all_times_periodic(p, dx, dy);
         #define add_hash(transform, dx, dy) \
             if (transforms.transform) { \
@@ -271,6 +272,6 @@ static Hash p_hash_full(const Pattern* p) {
         #undef add_hash
     }
     p_destroy(&temp);
-\    return out;
+    return out;
 }
 

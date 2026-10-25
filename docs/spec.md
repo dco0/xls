@@ -62,6 +62,9 @@ Then, the `grid` list must be given, it is of length `gens * height` and contain
 
 This section specifies other options that the backend needs to know.
 
+Possible keys:
+* `periodic = (dx, dy)c/(period)` - Provided if a periodic pattern is being searched for, changes duplicate solution detection and early exhaustion stuff.
+
 ### Example
 
 This search will find the domino in B/S1e:
@@ -97,4 +100,5 @@ data: 1
 2 3
 
 [OPTIONS]
+periodic = (0, 0)c/1
 ```

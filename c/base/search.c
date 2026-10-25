@@ -77,7 +77,12 @@ static struct {
     Pattern grid;
 
     struct {
-        
+
+        bool periodic;
+        uintmax_t periodic_dx;
+        uintmax_t periodic_dy;
+        uintmax_t periodic_period;
+
     } options;
 
 } s;

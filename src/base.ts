@@ -1,5 +1,49 @@
 
-export type Cell = number;
+export class LookupTableClauseFunc {
+
+    readonly search: Search;
+
+    varCount: number;
+    data: number[];
+
+    constructor(search: Search, varCount: number) {
+        this.search = search;
+        this.varCount = varCount;
+        this.data = new Array(search.maxStates ** varCount);
+        this.data.fill(0);
+    }
+    
+    copy(search?: Search): LookupTableClauseFunc {
+        let out = new LookupTableClauseFunc(search ?? this.search, this.varCount);
+        out.data = structuredClone(this.data);
+        return out;
+    }
+
+}
+
+
+export type ClauseFunc = LookupTableClauseFunc;
+
+
+export class Clause {
+    
+    readonly search: Search;
+
+    func: ClauseFunc;
+    data: number[];
+
+    constructor(search: Search, func: ClauseFunc, data: number[]) {
+        this.search = search;
+        this.func = func;
+        this.data = data;
+    }
+
+    copy(search?: Search, func?: LookupTableClauseFunc): Clause {
+        let out = new Clause(search ?? this.search, func ?? this.func, structuredClone(this.data));
+        return out;
+    }
+
+}
 
 
 export class Coord {
@@ -23,6 +67,9 @@ export class Coord {
 export function coord(t: number, x: number, y: number): Coord {
     return new Coord(t, x, y);
 }
+
+
+export type Cell = number;
 
 
 export class Grid {
@@ -332,53 +379,6 @@ export class Options {
 
     copy(search?: Search): Options {
         let out = new Options(search ?? this.search);
-        return out;
-    }
-
-}
-
-
-export class LookupTableClauseFunc {
-
-    readonly search: Search;
-
-    varCount: number;
-    data: number[];
-
-    constructor(search: Search, varCount: number) {
-        this.search = search;
-        this.varCount = varCount;
-        this.data = new Array(search.maxStates ** varCount);
-        this.data.fill(0);
-    }
-    
-    copy(search?: Search): LookupTableClauseFunc {
-        let out = new LookupTableClauseFunc(search ?? this.search, this.varCount);
-        out.data = structuredClone(this.data);
-        return out;
-    }
-
-}
-
-
-export type ClauseFunc = LookupTableClauseFunc;
-
-
-export class Clause {
-    
-    readonly search: Search;
-
-    func: ClauseFunc;
-    data: number[];
-
-    constructor(search: Search, func: ClauseFunc, data: number[]) {
-        this.search = search;
-        this.func = func;
-        this.data = data;
-    }
-
-    copy(search?: Search, func?: LookupTableClauseFunc): Clause {
-        let out = new Clause(search ?? this.search, func ?? this.func, structuredClone(this.data));
         return out;
     }
 
