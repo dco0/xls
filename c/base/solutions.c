@@ -211,7 +211,7 @@ static Hash p_hash_all_times_periodic_with_offset(const Pattern* p, size_t offse
         update_hash(out, y_offset);
         for (size_t y = 0; y < t_p.height; y++) {
             for (size_t x = 0; x < t_p.width; x++) {
-                Cell value = p_get(t_p, 0, x, y);
+                Cell value = p_get(&t_p, 0, x, y);
                 update_hash(out, value);
             }
         }
