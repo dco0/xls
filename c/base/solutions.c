@@ -164,7 +164,7 @@ static Hash min_hash(Hash x, Hash y) {
     return x < y ? x : y;
 }
 
-static Hash hash_at_time(const Pattern* p, size_t t) {
+static Hash p_hash_at_time(const Pattern* p, size_t t) {
     Hash out = HASH_OFFSET;
     update_hash(out, p->width);
     update_hash(out, p->height);
@@ -176,7 +176,7 @@ static Hash hash_at_time(const Pattern* p, size_t t) {
     return out;
 }
 
-static Hash hash_all_times(const Pattern* p) {
+static Hash p_hash_all_times(const Pattern* p) {
     Hash out = HASH_OFFSET;
     for (size_t t = 0; t < p->gens; t++) {
         for (size_t y = 0; y < p->height; y++) {
@@ -189,7 +189,7 @@ static Hash hash_all_times(const Pattern* p) {
     return out;
 }
 
-static Hash hash_all_times_periodic_with_offset(const Pattern* p, size_t offset, intmax_t dx, intmax_t dy) {
+static Hash p_hash_all_times_periodic_with_offset(const Pattern* p, size_t offset, intmax_t dx, intmax_t dy) {
     Hash out = HASH_OFFSET;
     // determine x_offset_0 and y_offset_0
     Pattern full_t_p = EMPTY_PATTERN;
@@ -222,15 +222,15 @@ static Hash hash_all_times_periodic_with_offset(const Pattern* p, size_t offset,
     return out;
 }
 
-static Hash hash_all_times_periodic(const Pattern* p, size_t dx, size_t dy) {
+static Hash p_hash_all_times_periodic(const Pattern* p, size_t dx, size_t dy) {
     Hash out = MAX_HASH;
     for (size_t offset = 0; offset < config.periodic_period; offset++) {
-        out = min_hash(out, hash_all_times_periodic_with_offset(p, offset, dx, dy));
+        out = min_hash(out, p_hash_all_times_periodic_with_offset(p, offset, dx, dy));
     }
     return out;
 }
 
-static Hash hash_full(const Pattern* p) {
+static Hash p_hash_full(const Pattern* p) {
     StaticSymmetry rule_symmetry = get_rule_static_symmetry();
     StaticSymmetry p_symmetry = p_get_static_symmetry(p);
     StaticSymmetry symmetry = STATIC_SYMMETRY_MEET[rule_symmetry][p_symmetry];
