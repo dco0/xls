@@ -22,7 +22,6 @@ typedef enum ClauseFuncType {
 typedef struct ClauseFunc {
     int type;
     union {
-        // error: 'data' may not be nested in a struct due to flexible array member
         LookupTableClauseFunc lookup_table;
     } data;
 } ClauseFunc;
@@ -32,6 +31,9 @@ typedef enum VarValue {
     V_OFF = 1,
     V_ON = 2,
 } VarValue;
+
+#define c_to_v(cell) ((cell) + 1)
+#define v_to_c(var) ((var) - 1)
 
 typedef struct Clause Clause;
 
@@ -64,7 +66,8 @@ static struct {
     uint64_t max_states;
 
     struct {
-        uint64_t var_count;
+        size_t var_count;
+        Variable* vars;
         size_t func_count;
         ClauseFunc* funcs;
         size_t clause_count;
@@ -84,7 +87,13 @@ static void normalize_search_grid(void) {
     for (size_t t = 0; t < s.grid.gens; t++) {
         for (size_t y = 0; y < s.grid.height; y++) {
             for (size_t x = 0; x < s.grid.width; x++) {
-                Cell cell = p_get(s.grid, t, x, y);
+                Cell value = p_get(s.grid, t, x, y);
+                if (c_is_var(value)) {
+                    Variable* var = &(s.graph.vars[value]);
+                    if (var->value != V_UNKNOWN) {
+                        p_get(s.grid, t, x, y) = v_to_c(var->value);
+                    }
+                }
             }
         }
     }
