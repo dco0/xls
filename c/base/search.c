@@ -59,7 +59,7 @@ typedef struct Clause {
 } Clause;
 
 
-typedef struct Search {
+typedef struct ULP {
 
     bool multi_rule;
 
@@ -85,9 +85,9 @@ typedef struct Search {
 
     } options;
 
-} Search;
+} ULP;
 
-static Search s;
+static ULP s;
 
 
 static void s_sync_search_grid(void) {

@@ -1,20 +1,20 @@
 
 export class LookupTableClauseFunc {
 
-    readonly search: Search;
+    readonly ulp: ULP;
 
     varCount: number;
     data: number[];
 
-    constructor(search: Search, varCount: number) {
-        this.search = search;
+    constructor(ulp: ULP, varCount: number) {
+        this.ulp = ulp;
         this.varCount = varCount;
-        this.data = new Array(search.maxStates ** varCount);
+        this.data = new Array(ulp.maxStates ** varCount);
         this.data.fill(0);
     }
     
-    copy(search?: Search): LookupTableClauseFunc {
-        let out = new LookupTableClauseFunc(search ?? this.search, this.varCount);
+    copy(ulp?: ULP): LookupTableClauseFunc {
+        let out = new LookupTableClauseFunc(ulp ?? this.ulp, this.varCount);
         out.data = structuredClone(this.data);
         return out;
     }
@@ -27,19 +27,19 @@ export type ClauseFunc = LookupTableClauseFunc;
 
 export class Clause {
     
-    readonly search: Search;
+    readonly ulp: ULP;
 
     func: ClauseFunc;
     data: number[];
 
-    constructor(search: Search, func: ClauseFunc, data: number[]) {
-        this.search = search;
+    constructor(ulp: ULP, func: ClauseFunc, data: number[]) {
+        this.ulp = ulp;
         this.func = func;
         this.data = data;
     }
 
-    copy(search?: Search, func?: LookupTableClauseFunc): Clause {
-        let out = new Clause(search ?? this.search, func ?? this.func, structuredClone(this.data));
+    copy(ulp?: ULP, func?: LookupTableClauseFunc): Clause {
+        let out = new Clause(ulp ?? this.ulp, func ?? this.func, structuredClone(this.data));
         return out;
     }
 
@@ -74,20 +74,14 @@ export type Cell = number;
 
 export class Grid {
 
-    readonly search: Search;
-
     width: number = 0;
     height: number = 0;
     gens: number = 0;
 
     data: Cell[][][] = [];
 
-    constructor(search: Search) {
-        this.search = search;
-    }
-
-    copy(search?: Search): Grid {
-        let out = new Grid(search ?? this.search);
+    copy(): Grid {
+        let out = new Grid();
         out.width = this.width;
         out.height = this.height;
         out.gens = this.gens;
@@ -371,21 +365,21 @@ export class Grid {
 
 export class Options {
 
-    readonly search: Search;
+    readonly ulp: ULP;
 
-    constructor(search: Search) {
-        this.search = search;
+    constructor(ulp: ULP) {
+        this.ulp = ulp;
     }
 
-    copy(search?: Search): Options {
-        let out = new Options(search ?? this.search);
+    copy(ulp?: ULP): Options {
+        let out = new Options(ulp ?? this.ulp);
         return out;
     }
 
 }
 
 
-export class Search {
+export class ULP {
 
     readonly maxStates: number;
 
@@ -400,12 +394,12 @@ export class Search {
 
     constructor(maxStates: number) {
         this.maxStates = maxStates;
-        this.grid = new Grid(this);
+        this.grid = new Grid();
         this.options = new Options(this);
     }
 
-    copy(): Search {
-        let out = new Search(this.maxStates);
+    copy(): ULP {
+        let out = new ULP(this.maxStates);
         let funcMap = new Map<ClauseFunc, ClauseFunc>();
         for (let func of this.funcs) {
             let copied = func.copy(out);
@@ -420,7 +414,6 @@ export class Search {
             let copied = clause.copy(out, newFunc);
             out.clauses.push(copied);
         }
-        out.grid = this.grid.copy(out);
         out.options = this.options.copy(out);
         return out;
     }
