@@ -58,13 +58,13 @@
 
 #define error(format, ...) \
     do { \
-        real_fprintf(stderr, "Error: "format"\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__); \
+        real_fprintf(stderr, "Error: " format "\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__); \
         exit(EXIT_FAILURE); \
     } while (0)
 
 #define unexpected_error(format, ...) \
     do { \
-        real_fprintf(stderr, "Unexpected error: "format"\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__); \
+        real_fprintf(stderr, "Unexpected error: " format "\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__); \
         exit(EXIT_FAILURE); \
     } while (0)
 

@@ -61,7 +61,7 @@ typedef struct Clause {
 } Clause;
 
 
-static struct {
+typedef struct ULP {
 
     uint64_t max_states;
 
@@ -85,18 +85,27 @@ static struct {
 
     } options;
 
-} s;
+} ULP;
+static ULP s;
 
 
 static void normalize_search_grid(void) {
     for (size_t t = 0; t < s.grid.gens; t++) {
         for (size_t y = 0; y < s.grid.height; y++) {
             for (size_t x = 0; x < s.grid.width; x++) {
+                #ifdef __cplusplus
+                Cell value = p_get(&s.grid, t, x, y);
+                #else
                 Cell value = p_get(s.grid, t, x, y);
+                #endif
                 if (c_is_var(value)) {
                     Variable* var = &(s.graph.vars[value]);
                     if (var->value != V_UNKNOWN) {
+                        #ifdef __cplusplus
+                        p_get(&s.grid, t, x, y) = v_to_c(var->value);
+                        #else
                         p_get(s.grid, t, x, y) = v_to_c(var->value);
+                        #endif
                     }
                 }
             }

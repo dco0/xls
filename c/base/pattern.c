@@ -28,7 +28,11 @@ static const Pattern EMPTY_PATTERN = {
 };
 
 #define internal_p_get(p, t, x, y) (p)->data[((((t) * (p)->height) + (y)) * (p)->width) + (x)]
+#ifdef __cplusplus
+#define p_get(p, t, x, y) internal_p_get(p, t, x, y)
+#else
 #define p_get(p, t, x, y) internal_p_get(_Generic((p), Pattern*: (p), const Pattern*: (p), Pattern: &(p)), t, x, y)
+#endif
 
 static void p_destroy(Pattern* p) {
     if (p->used) {
@@ -46,7 +50,7 @@ static void p_init(Pattern* p, size_t width, size_t height, size_t gens) {
     p->width = width;
     p->height = height;
     p->gens = gens;
-    p->data = safe_malloc(width * height * gens * sizeof(Cell));
+    p->data = (Cell*) safe_malloc(width * height * gens * sizeof(Cell));
 }
 
 
