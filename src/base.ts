@@ -1,4 +1,19 @@
 
+
+export class XLSError extends Error {
+
+    name: string = 'XLSError';
+    [Symbol.toStringTag]: string = 'XLSError';
+
+}
+
+
+export type Cell = number;
+
+export const OFF = 0;
+export const ON = 1;
+
+
 export class LookupTableClauseFunc {
 
     readonly ulp: ULP;
@@ -30,7 +45,7 @@ export class Clause {
     readonly ulp: ULP;
 
     func: ClauseFunc;
-    data: number[];
+    data: Cell[];
 
     constructor(ulp: ULP, func: ClauseFunc, data: number[]) {
         this.ulp = ulp;
@@ -67,9 +82,6 @@ export class Coord {
 export function coord(t: number, x: number, y: number): Coord {
     return new Coord(t, x, y);
 }
-
-
-export type Cell = number;
 
 
 export class Grid {
@@ -176,7 +188,7 @@ export class Grid {
         if (!this.isInBounds(t, x, y)) {
             throw new Error(`Out of bounds set: t = ${t}, x = ${x}, y = ${y}`);
         }
-        this.data[t][y][x] = structuredClone(value);
+        this.data[t][y][x] = value;
         return this;
     }
 
@@ -255,14 +267,14 @@ export class Grid {
         };
     }
 
-    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: Cell = 0): this {
+    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: Cell | (() => Cell)): this {
         let newWidth = this.width + left + right;
         let newHeight = this.height + top + bottom;
         let newGens = this.gens + start + end;
         // first make empty placeholders
         let emptyRow: Cell[] = [];
         for (let i = 0; i < newWidth; i++) {
-            emptyRow.push(structuredClone(value));
+            emptyRow.push(typeof value === 'function' ? value() : value);
         }
         let emptyLayer: Cell[][] = [];
         for (let i = 0; i < newHeight; i++) {
@@ -272,10 +284,10 @@ export class Grid {
         for (let layer of this.data) {
             for (let row of layer) {
                 for (let i = 0; i < left; i++) {
-                    row.unshift(structuredClone(value));
+                    row.unshift(typeof value === 'function' ? value() : value);
                 }
                 for (let i = 0; i < right; i++) {
-                    row.push(structuredClone(value));
+                    row.push(typeof value === 'function' ? value() : value);
                 }
             }
             for (let i = 0; i < top; i++) {
@@ -365,14 +377,11 @@ export class Grid {
 
 export class Options {
 
-    readonly ulp: ULP;
+    periodic: {dx: number, dy: number, period: number} | undefined = undefined;
 
-    constructor(ulp: ULP) {
-        this.ulp = ulp;
-    }
-
-    copy(ulp?: ULP): Options {
-        let out = new Options(ulp ?? this.ulp);
+    copy(): Options {
+        let out = new Options();
+        out.periodic = structuredClone(this.periodic);
         return out;
     }
 
@@ -389,13 +398,15 @@ export class ULP {
     clauses: Clause[] = [];
     
     grid: Grid;
+    background: Grid;
 
     options: Options;
 
     constructor(maxStates: number) {
         this.maxStates = maxStates;
         this.grid = new Grid();
-        this.options = new Options(this);
+        this.background = new Grid();
+        this.options = new Options();
     }
 
     copy(): ULP {
@@ -414,7 +425,9 @@ export class ULP {
             let copied = clause.copy(out, newFunc);
             out.clauses.push(copied);
         }
-        out.options = this.options.copy(out);
+        out.grid = this.grid.copy();
+        out.background = this.background.copy();
+        out.options = this.options.copy();
         return out;
     }
 
@@ -432,6 +445,80 @@ export class ULP {
         let out = new Clause(this, func, data);
         this.clauses.push(out);
         return out;
+    }
+
+    reassign(from: Cell, to: Cell): void {
+        for (let clause of this.clauses) {
+            for (let i = 0; i < clause.data.length; i++) {
+                if (clause.data[i] === from) {
+                    clause.data[i] = to;
+                }
+            }
+        }
+        for (let [coord, cell] of this.grid.entries()) {
+            if (cell === from) {
+                this.grid.set(coord, to);
+            }
+        }
+    }
+
+    setVar(cell: Cell, value: Cell): void {
+        this.reassign(cell, value);
+    }
+
+    bindVars(x: Cell, y: Cell): void {
+        this.reassign(x, y);
+    }
+
+    addClauses(func: ClauseFunc, noClause?: Grid): void {
+        let grid = this.grid;
+        for (let {t, x, y} of this.grid.coords()) {
+            if (t === this.grid.gens - 1) {
+                continue;
+            }
+            if (noClause && noClause.get(t, x, y) === 1) {
+                continue;
+            }
+            this.addClause(func, [
+                grid.get(t + 1, x, y),
+                grid.getAllowOOB(t, x - 1, y - 1) ?? 0,
+                grid.getAllowOOB(t, x, y - 1) ?? 0,
+                grid.getAllowOOB(t, x + 1, y - 1) ?? 0,
+                grid.getAllowOOB(t, x - 1, y) ?? 0,
+                grid.get(t, x, y) ?? 0,
+                grid.getAllowOOB(t, x + 1, y) ?? 0,
+                grid.getAllowOOB(t, x - 1, y + 1) ?? 0,
+                grid.getAllowOOB(t, x, y + 1) ?? 0,
+                grid.getAllowOOB(t, x + 1, y + 1) ?? 0,
+            ]);
+        }
+    }
+
+    removeUnusedVars(): void {
+        this.varCount = 0;
+        let mapping: {[key: number]: number} = {};
+        for (let i = 0; i < this.maxStates; i++) {
+            mapping[i] = i;
+        }
+        for (let clause of this.clauses) {
+            for (let i = 0; i < clause.data.length; i++) {
+                let cell = clause.data[i];
+                if (cell in mapping) {
+                    clause.data[i] = mapping[cell];
+                } else {
+                    let value = this.getNewVar();
+                    clause.data[i] = value;
+                    mapping[cell] = value;
+                }
+            }
+        }
+        for (let [coord, cell] of this.grid.entries()) {
+            this.grid.set(coord, mapping[cell]);
+        }
+    }
+
+    normalize(): void {
+        this.removeUnusedVars();
     }
 
 }
