@@ -32,7 +32,7 @@ namespace cnf {
         return res;
     }
 
-    void make_proposition(const std::vector<lit>& vars, const std::vector<cube>& enc, std::vector<std::vector<lit>>& dest) {
+    void make_proposition(const std::vector<lit>& vars, const std::vector<cube>& enc, cnf_holder& dest) {
         std::vector<int> clause;
         for (const cube& c : enc) {
             clause.clear();
@@ -45,7 +45,7 @@ namespace cnf {
                     else if (v != -1) clause.push_back(v > 0 ? v-1 : v+1);
                 }
             }
-            if (!trivial) dest.push_back(clause);
+            if (!trivial) dest += clause;
         }
     }
 }

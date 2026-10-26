@@ -1,50 +1,40 @@
 #include "internal.hpp"
 
 namespace cnf {
-    CNF_clauses* vec_to_clauses(const std::vector<std::vector<int>>& clauses) {
-        size_t length = clauses.size();
-        for (const auto& i : clauses) length += i.size();
-        CNF_clauses* result = (CNF_clauses*) safe_malloc(sizeof(CNF_clauses) + sizeof(int) * length);
-        result->clause_count = clauses.size();
-        int* ptr = result->lits;
-        for (const auto& i : clauses) {
+    CNF_clauses* vec_to_clauses(const cnf_holder& holder) {
+        size_t length = holder.clauses.size();
+        for (const auto& i : holder.clauses) length += i.size();
+        CNF_clauses* clauses = (CNF_clauses*) safe_malloc(sizeof(CNF_clauses) + sizeof(int) * length);
+        clauses->clause_count = holder.clauses.size();
+        clauses->var_count = holder.max_lit;
+        int* ptr = clauses->lits;
+        for (const auto& i : holder.clauses) {
             memcpy(ptr, i.data(), sizeof(int) * i.size());
             ptr += i.size();
             *ptr++ = 0;
         }
-        return result;
+        return clauses;
     }
 
-    CNF_vmap* vec_to_vmap(const std::vector<vmap_entry>& vmap) {
-        size_t length = 0;
-        for (const auto& i : vmap) {
-            size_t num_states = i.x.size();
-            size_t bits_per_var = i.x[0].size();
-            size_t needed = sizeof(vmap_entry) + num_states * bits_per_var * sizeof(*CNF_vmap_entry::data);
-            needed += -needed & alignof(CNF_vmap_entry)-1;
-            length += needed;
+    CNF_vmap* vec_to_vmap(const cnf_holder& holder) {
+        constexpr vmap_entry *_test = 0;
+        constexpr size_t VMAP_OFFSET = (size_t)(_test+1);
+
+        size_t stride = 0;
+        for (const auto& i : holder.vmap) {
+            size_t size = sizeof(CNF_vmap) + i.bits * i.values;
+            size += size%VMAP_OFFSET ? VMAP_OFFSET-size%VMAP_OFFSET : 0;
+            stride = size > stride ? size : stride;
         }
-        CNF_vmap* result = (CNF_vmap*) safe_malloc(sizeof(CNF_vmap) + length);
-        size_t offset = 0;
-        size_t count = 0;
-        for (const auto& i : vmap) {
-            size_t num_states = i.x.size();
-            size_t bits_per_var = i.x[0].size();
-            size_t needed = sizeof(vmap_entry) + num_states * bits_per_var * sizeof(*CNF_vmap_entry::data);
-            needed += -needed & alignof(CNF_vmap_entry)-1;
-            CNF_vmap_entry& x = *(CNF_vmap_entry*)((char*)result->data + offset);
-            offset += needed;
-            x.variable = count++;
-            x.num_states = num_states;
-            x.bits_per_var = bits_per_var;
-            x.next = offset == length ? NULL : (CNF_vmap_entry*)((char*)result->data + offset);
-            bool* ptr = x.data;
-            for (const auto& j : vmap) {
-                memcpy(ptr, j.x.data(), j.x.size() * sizeof(*CNF_vmap_entry::data));
-                ptr += j.x.size();
-            }
+        CNF_vmap* vmap = (CNF_vmap*) safe_malloc(sizeof(CNF_vmap) + stride * holder.vmap.size());
+        vmap->var_count = holder.vmap.size();
+        vmap->stride = stride / VMAP_OFFSET;
+        for (int i = 0; i < holder.vmap.size(); i++) {
+            const vmap_entry& src = holder.vmap[i];
+            vmap->data[stride * i] = {.bits = src.bits, .values = src.values};
+            memcpy(vmap->data[stride * i].data, src.table.data(), src.bits * src.values);
         }
-        return result;
+        return vmap;
     }
 
     struct _vec_empty { bool operator()(const std::vector<int>& x) { return x.size() == 0; } };
@@ -63,14 +53,13 @@ namespace cnf {
 } // namespace cnf
 
 CNF* cnf_encode(const ULP* ulp) {
-    std::vector<std::vector<int>> clauses;
-    std::vector<cnf::vmap_entry> vmap;
+    cnf::cnf_holder clauses;
 
     // do stuff?!?!?!?
 
-    cnf::preprocess_cnf(clauses);
+    cnf::preprocess_cnf(clauses.clauses);
     CNF* cnf = (CNF*) safe_malloc(sizeof(CNF));
     cnf->clauses = cnf::vec_to_clauses(clauses);
-    cnf->vmap = cnf::vec_to_vmap(vmap);
+    cnf->vmap = cnf::vec_to_vmap(clauses);
     return cnf;
 }
