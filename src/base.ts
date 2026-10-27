@@ -61,7 +61,13 @@ export class Clause {
 }
 
 
-export class Coord {
+export interface CoordLike {
+    t: number;
+    x: number;
+    y: number;
+}
+
+export class Coord implements CoordLike {
 
     t: number;
     x: number;
@@ -73,8 +79,20 @@ export class Coord {
         this.y = y;
     }
 
+    copy(): Coord {
+        return new Coord(this.t, this.x, this.y);
+    }
+
     eq(other: Coord): boolean {
         return this.t === other.t && this.x === other.x && this.y === other.y;
+    }
+
+    add(other: Coord): Coord {
+        return new Coord(this.t + other.t, this.x + other.x, this.y + other.y);
+    }
+
+    sub(other: Coord): Coord {
+        return new Coord(this.t - other.t, this.x - other.x, this.y - other.y);
     }
 
 }
@@ -84,13 +102,57 @@ export function coord(t: number, x: number, y: number): Coord {
 }
 
 
-export class Grid {
+export interface GridLike {
+
+    width: number;
+    height: number;
+    gens: number;
+
+    data: Cell[][][];
+
+    eq(other: GridLike): boolean;
+
+    copy(): GridLike;
+
+    isInBounds(t: number, x: number, y: number): boolean;
+    isInBounds(x: number, y: number): boolean;
+    isInBounds(coord: CoordLike): boolean;
+
+    get(t: number, x: number, y: number): Cell;
+    get(coord: CoordLike): Cell;
+
+    getAllowOOB(t: number, x: number, y: number): Cell | undefined;
+    getAllowOOB(coord: CoordLike): Cell | undefined;
+
+    set(t: number, x: number, y: number, value: Cell): void;
+    set(pos: CoordLike, value: Cell): void;
+
+    entries(): IterableIterator<[Coord, Cell]>;
+    coords(): IterableIterator<Coord>;
+    cells(): IterableIterator<Cell>;
+
+    flipHorizontal(): void;
+    flipVertical(): void;
+    rotateLeft(): void;
+    rotateRight(): void;
+    rotate180(): void;
+    flipDiagonal(): void;
+    flipAntiDiagonal(): void;
+
+}
+
+
+export class Grid implements GridLike {
 
     width: number = 0;
     height: number = 0;
     gens: number = 0;
 
     data: Cell[][][] = [];
+    
+    eq(other: GridLike): boolean {
+        return this === other;
+    }
 
     copy(): Grid {
         let out = new Grid();
@@ -103,8 +165,8 @@ export class Grid {
 
     isInBounds(t: number, x: number, y: number): boolean;
     isInBounds(x: number, y: number): boolean;
-    isInBounds(coord: Coord): boolean;
-    isInBounds(_t: number | Coord, _x?: number, _y?: number): boolean {
+    isInBounds(coord: CoordLike): boolean;
+    isInBounds(_t: number | CoordLike, _x?: number, _y?: number): boolean {
         let t: number;
         let x: number;
         let y: number;
@@ -125,8 +187,8 @@ export class Grid {
     }
 
     get(t: number, x: number, y: number): Cell;
-    get(coord: Coord): Cell;
-    get(_t: number | Coord, _x?: number, _y?: number): Cell {
+    get(coord: CoordLike): Cell;
+    get(_t: number | CoordLike, _x?: number, _y?: number): Cell {
         let t: number;
         let x: number;
         let y: number;
@@ -146,8 +208,8 @@ export class Grid {
     }
 
     getAllowOOB(t: number, x: number, y: number): Cell | undefined;
-    getAllowOOB(coord: Coord): Cell | undefined;
-    getAllowOOB(_t: number | Coord, _x?: number, _y?: number): Cell | undefined {
+    getAllowOOB(coord: CoordLike): Cell | undefined;
+    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): Cell | undefined {
         let t: number;
         let x: number;
         let y: number;
@@ -167,9 +229,9 @@ export class Grid {
         }
     }
 
-    set(t: number, x: number, y: number, value: Cell): this;
-    set(pos: Coord, value: Cell): this;
-    set(_t: number | Coord, _x: number | Cell, _y?: number, _value?: Cell): this {
+    set(t: number, x: number, y: number, value: Cell): void;
+    set(pos: CoordLike, value: Cell): void;
+    set(_t: number | CoordLike, _x: number | Cell, _y?: number, _value?: Cell): void {
         let value: Cell;
         let t: number;
         let x: number;
@@ -189,7 +251,6 @@ export class Grid {
             throw new Error(`Out of bounds set: t = ${t}, x = ${x}, y = ${y}`);
         }
         this.data[t][y][x] = value;
-        return this;
     }
 
     entries(): IterableIterator<[Coord, Cell]> {
@@ -267,7 +328,7 @@ export class Grid {
         };
     }
 
-    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: Cell | (() => Cell)): this {
+    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: Cell | (() => Cell)): void {
         let newWidth = this.width + left + right;
         let newHeight = this.height + top + bottom;
         let newGens = this.gens + start + end;
@@ -306,10 +367,9 @@ export class Grid {
         this.width = newWidth;
         this.height = newHeight;
         this.gens = newGens;
-        return this;
     }
 
-    shrink({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}): this {
+    shrink({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}): void {
         let newWidth = this.width - left - right;
         let newHeight = this.height - top - bottom;
         let newGens = this.gens - start - end;
@@ -338,38 +398,315 @@ export class Grid {
         this.height = newHeight;
         this.width = newWidth;
         this.gens = newGens;
-        return this;
     }
 
-    flipHorizontal(): this {
+    flipHorizontal(): void {
         this.data = this.data.map(grid => grid.map(row => row.reverse()));
-        return this;
     }
 
-    flipVertical(): this {
+    flipVertical(): void {
         this.data = this.data.map(grid => grid.reverse());
-        return this;
     }
 
-    rotateLeft(): this {
-        return this.flipDiagonal().flipVertical();
+    rotateLeft(): void {
+        this.flipDiagonal();
+        this.flipVertical();
     }
 
-    rotateRight(): this {
-        return this.flipDiagonal().flipHorizontal();
+    rotateRight(): void {
+        this.flipDiagonal()
+        this.flipHorizontal();
     }
 
-    rotate180(): this {
-        return this.flipHorizontal().flipVertical();
+    rotate180(): void {
+        this.flipHorizontal()
+        this.flipVertical();
     }
 
-    flipDiagonal(): this {
+    flipDiagonal(): void {
         this.data = this.data.map(grid => grid[0].map((_, i) => grid.map(row => row[i])));
-        return this;
     }
 
-    flipAntiDiagonal(): this {
-        return this.flipDiagonal().rotate180();
+    flipAntiDiagonal(): void {
+        this.flipDiagonal()
+        this.rotate180();
+    }
+
+}
+
+
+export class GridSlice implements GridLike {
+
+    grid: Grid;
+    start: Coord;
+    end: Coord;
+
+    width: number;
+    height: number;
+    gens: number;
+
+    constructor(grid: Grid | GridSlice, start: Coord, end: Coord) {
+        if (grid instanceof GridSlice) {
+            start = start.add(grid.start);
+            end = end.add(grid.start);
+            grid = grid.grid;
+        }
+        this.grid = grid;
+        this.start = start;
+        this.end = end;
+        this.width = this.end.x - this.start.x;
+        this.height = this.end.y - this.start.y;
+        this.gens = this.end.t - this.start.t;
+    }
+
+    get data(): Cell[][][] {
+        let out: Cell[][][] = [];
+        for (let t = 0; t < this.gens; t++) {
+            let layer: Cell[][] = [];
+            for (let y = 0; y < this.height; y++) {
+                let fullRow = this.grid.data[t + this.start.t][y + this.start.y];
+                layer.push(fullRow.slice(this.start.x, this.end.x));
+            }
+            out.push(layer);
+        }
+        return out;
+    }
+
+    copy(): GridSlice {
+        return new GridSlice(this.grid, this.start.copy(), this.end.copy());
+    }
+
+    eq(other: GridLike): boolean {
+        return other instanceof GridSlice && this.grid === other.grid && this.start.eq(other.start) && this.end.eq(other.end);
+    }
+
+    isInBounds(t: number, x: number, y: number): boolean;
+    isInBounds(x: number, y: number): boolean;
+    isInBounds(coord: CoordLike): boolean;
+    isInBounds(_t: number | CoordLike, _x?: number, _y?: number): boolean {
+        let t: number;
+        let x: number;
+        let y: number;
+        if (typeof _t === 'object') {
+            t = _t.t;
+            x = _t.x;
+            y = _t.y;
+        } else if (_y === undefined) {
+            t = 0;
+            x = _t;
+            y = _x as number;
+        } else {
+            t = _t;
+            x = _x as number;
+            y = _y as number;
+        }
+        return t >= 0 && t < this.gens && x >= 0 && x < this.width && y >= 0 && y < this.height;
+    }
+
+
+    get(t: number, x: number, y: number): Cell;
+    get(coord: CoordLike): Cell;
+    get(_t: number | CoordLike, _x?: number, _y?: number): Cell {
+        let t: number;
+        let x: number;
+        let y: number;
+        if (typeof _t === 'object') {
+            t = _t.t;
+            x = _t.x;
+            y = _t.y;
+        } else {
+            t = _t;
+            x = _x as number;
+            y = _y as number;
+        }
+        if (!this.isInBounds(t, x, y)) {
+            throw new Error(`Out of bounds get: t = ${t}, x = ${x}, y = ${y}`);
+        }
+        return this.grid.data[t + this.start.t][y + this.start.y][x + this.start.x];
+    }
+
+    getAllowOOB(t: number, x: number, y: number): Cell | undefined;
+    getAllowOOB(coord: CoordLike): Cell | undefined;
+    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): Cell | undefined {
+        let t: number;
+        let x: number;
+        let y: number;
+        if (typeof _t === 'object') {
+            t = _t.t;
+            x = _t.x;
+            y = _t.y;
+        } else {
+            t = _t;
+            x = _x as number;
+            y = _y as number;
+        }
+        if (!this.isInBounds(t, x, y)) {
+            return undefined;
+        } else {
+            return this.grid.data[t + this.start.t][y + this.start.y][x + this.start.x];
+        }
+    }
+
+    set(t: number, x: number, y: number, value: Cell): void;
+    set(pos: CoordLike, value: Cell): void;
+    set(_t: number | CoordLike, _x: number | Cell, _y?: number, _value?: Cell): void {
+        let value: Cell;
+        let t: number;
+        let x: number;
+        let y: number;
+        if (typeof _t === 'object') {
+            t = _t.t;
+            x = _t.x;
+            y = _t.y;
+            value = _x;
+        } else {
+            t = _t;
+            x = _x;
+            y = _y as number;
+            value = _value as Cell;
+        }
+        if (!this.isInBounds(t, x, y)) {
+            throw new Error(`Out of bounds set: t = ${t}, x = ${x}, y = ${y}`);
+        }
+        this.grid.data[t + this.start.t][y + this.start.y][x + this.start.x] = value;
+    }
+
+
+    entries(): IterableIterator<[Coord, Cell]> {
+        let t = 0;
+        let x = 0;
+        let y = 0;
+        return {
+            [Symbol.iterator]() {
+                return this;
+            },
+            // arrow function so it uses the `this` context of the Grid
+            next: () => {
+                if (t >= this.gens) {
+                    return {done: true, value: undefined};
+                }
+                let pos = coord(t, x, y);
+                return {done: false, value: [pos, this.get(pos)]};
+            }
+        };
+    }
+
+    coords(): IterableIterator<Coord> {
+        let t = 0;
+        let x = 0;
+        let y = 0;
+        return {
+            [Symbol.iterator]() {
+                return this;
+            },
+            // arrow function so it uses the `this` context of the Grid
+            next: () => {
+                if (t >= this.gens) {
+                    return {done: true, value: undefined};
+                }
+                let out = {done: false, value: coord(t, x, y)};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
+            }
+        };
+    }
+
+    cells(): IterableIterator<Cell> {
+        let t = 0;
+        let x = 0;
+        let y = 0;
+        return {
+            [Symbol.iterator]() {
+                return this;
+            },
+            // arrow function so it uses the `this` context of the Grid
+            next: () => {
+                if (t >= this.gens) {
+                    return {done: true, value: undefined};
+                }
+                let out = {done: false, value: this.get(coord(t, x, y))};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
+            }
+        };
+    }
+
+    flipHorizontal(): void {
+        for (let t = 0; t < this.gens; t++) {
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width / 2; x++) {
+                    let left = this.get(t, x, y);
+                    let right = this.get(t, this.width - x - 1, y);
+                    this.set(t, x, y, right);
+                    this.set(t, this.width - x - 1, y, left);
+                }
+            }
+        }
+    }
+
+    flipVertical(): void {
+        for (let t = 0; t < this.gens; t++) {
+            for (let x = 0; x < this.width; x++) {
+                for (let y = 0; y < this.height / 2; y++) {
+                    let top = this.get(t, x, y);
+                    let bottom = this.get(t, x, this.height - y - 1);
+                    this.set(t, x, y, bottom);
+                    this.set(t, x, this.height - y - 1, top);
+                }
+            }
+        }
+    }
+
+    rotateLeft(): void {
+        this.flipDiagonal();
+        this.flipVertical();
+    }
+
+    rotateRight(): void {
+        this.flipDiagonal()
+        this.flipHorizontal();
+    }
+
+    rotate180(): void {
+        this.flipHorizontal()
+        this.flipVertical();
+    }
+
+    flipDiagonal(): void {
+        for (let t = 0; t < this.gens; t++) {
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (y > x) {
+                        continue;
+                    }
+                    let upperRight = this.get(t, x, y);
+                    let lowerLeft = this.get(t, y, x);
+                    this.set(t, x, y, lowerLeft);
+                    this.set(t, this.width - x - 1, y, upperRight);
+                }
+            }
+        }
+    }
+
+    flipAntiDiagonal(): void {
+        this.flipDiagonal()
+        this.rotate180();
     }
 
 }
@@ -470,13 +807,13 @@ export class ULP {
         this.reassign(x, y);
     }
 
-    addClauses(func: ClauseFunc, noClause?: Grid): void {
+    addClauses(func: ClauseFunc, noclause?: Grid): void {
         let grid = this.grid;
         for (let {t, x, y} of this.grid.coords()) {
             if (t === this.grid.gens - 1) {
                 continue;
             }
-            if (noClause && noClause.get(t, x, y) === 1) {
+            if (noclause && noclause.get(t, x, y) === 1) {
                 continue;
             }
             this.addClause(func, [
