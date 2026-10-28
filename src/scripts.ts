@@ -1191,9 +1191,7 @@ class XLSScriptParser {
 
     ifStatement(): Statement {
         let token = this.eat('if');
-        this.eat('(');
         let condition = this.expression();
-        this.eat(')');
         let ifTrue = this.blockStatement();
         let ifFalse: BlockStatement | undefined = undefined;
         if (this.match('else')) {
@@ -1214,9 +1212,7 @@ class XLSScriptParser {
 
     whileStatement(): Statement {
         let token = this.eat('while');
-        this.eat('(');
         let condition = this.expression();
-        this.eat(')');
         let value = this.blockStatement();
         return {pos: token.pos, type: 'while-statement', condition, value};
     }
