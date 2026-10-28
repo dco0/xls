@@ -1,6 +1,6 @@
 
 import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/lib/core/index.js';
-import {XLSError, Cell, OFF, ON, UNKNOWN, LookupTableClauseFunc, ClauseFunc, Coord, coord, GridCell, gridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
+import {XLSError, Cell, OFF, ON, UNKNOWN, ClauseFunc, Coord, coord, GridCell, gridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
 
 
 interface Position {
@@ -1753,8 +1753,11 @@ class XLSScriptRunner {
                 if (GRID_MAGIC_KEYS.has(member as GridMagicKey)) {
                     return {pos, type: 'lvalue', kind: 'grid_magic_key', grid: value.grid, key: member as GridMagicKey};
                 }
-            } else if (member.type === 'number') {
-
+            } else if (member.type === 'vector' && member.data.length === 3) {
+                let t = member.data[0];
+                let x = member.data[1];
+                let y = member.data[2];
+                return {pos, type: 'lvalue', kind: 'grid_coord', grid: value.grid, coord: coord(t, x, y)};
             }
             this.error(node, `TypeError: Member '${memberStr}' does not exist in value of type '${value.type}'`);
         } else {
@@ -2148,29 +2151,32 @@ class XLSScriptRunner {
         }
     }
 
-    async program(data: Statement[]): Promise<ULP> {
+    async program(data: Statement[]): Promise<void> {
         for (let node of data) {
             this.statement(node);
         }
-        // expand the grid to add in the background
         let grid = this.ulp.grid;
         let bg = this.background.copy();
         // make them all noclause
         for (let cell of bg.cells()) {
             cell.func = undefined;
         }
-        grid.expand({top: 1, bottom: 1, left: 1, right: 1}, gridCell(OFF, undefined));
+        // expand the grid to add in the background
+        let empty = gridCell(OFF, undefined);
+        grid.expand({top: 1, bottom: 1, left: 1, right: 1}, empty.copy());
         for (let t = 0; t < grid.gens; t++) {
-            grid.set(t, 0, 0, bg.get(0, grid.width - 1, grid.height - 1));
-            grid.set(t, grid.width - 1, grid.height - 1, bg.get(0, 0, 0));
+            grid.set(t, 0, 0, bg.getAllowOOB(0, grid.width - 1, grid.height - 1) ?? empty.copy());
+            grid.set(t, grid.width - 1, grid.height - 1, bg.getAllowOOB(0, 0, 0) ?? empty.copy());
             for (let x = 1; x < grid.width - 1; x++) {
-                grid.set(t, x, 0, bg.get(0, x, grid.width - 1));
-                grid.set(t, x, grid.width - 1, bg.get(0, 0, x));
+                grid.set(t, x, 0, bg.getAllowOOB(t, x, grid.height - 1) ?? empty.copy());
+                grid.set(t, x, grid.height - 1, bg.getAllowOOB(t, x, 0) ?? empty.copy());
+            }
+            for (let y = 1; y < grid.height - 1; y++) {
+                grid.set(t, 0, y, bg.getAllowOOB(t, grid.width - 1, y) ?? empty.copy());
+                grid.set(t, grid.width - 1, y, bg.getAllowOOB(t, 0, y) ?? empty.copy());
             }
         }
         this.ulp.addRuleClauses();
-        console.log(this.scope.vars);
-        return this.ulp;
     }
 
 }
@@ -2193,7 +2199,7 @@ addBuiltinFunction('set_rule', ['rule'], function(pos: Position, _rule?: Value):
     } else {
         this.error(rule, `Rules that are not 2-state range-1 Moore-neighborhood are not supported`);
     }
-    let func = new LookupTableClauseFunc(this.ulp, 10);
+    let func = this.ulp.addLookupTableClauseFunc(10);
     for (let i = 0; i < 1024; i++) {
         func.table[i] = (trs[i >> 1] === (i & 1)) ? 1 : 0;
     }
@@ -2207,7 +2213,9 @@ export async function runScript(code: string, filePath: string = '<anonymous>'):
     let parser = new XLSScriptParser(filePath, code, ulp);
     let data = await parser.program();
     let runner = new XLSScriptRunner(code, ulp);
-    return await runner.program(data);
+    await runner.program(data);
+    ulp.normalize();
+    return ulp;
 }
 
 export async function runScriptFromFile(filePath: string): Promise<ULP> {

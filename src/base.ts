@@ -305,7 +305,17 @@ export class Grid implements GridLike {
                     return {done: true, value: undefined};
                 }
                 let pos = coord(t, x, y);
-                return {done: false, value: [pos, this.get(pos)]};
+                let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
             }
         };
     }
@@ -323,7 +333,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -351,7 +361,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(coord(t, x, y))};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -623,7 +633,17 @@ export class GridSlice implements GridLike {
                     return {done: true, value: undefined};
                 }
                 let pos = coord(t, x, y);
-                return {done: false, value: [pos, this.get(pos)]};
+                let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
             }
         };
     }
@@ -641,7 +661,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -669,7 +689,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(coord(t, x, y))};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -813,7 +833,7 @@ export class ULP {
             ``,
             ...this.grid.data.flatMap(layer => {
                 return [
-                    ...layer.map(row => row.join(' ')),
+                    ...layer.map(row => row.map(cell => cell.value).join(' ')),
                     ``,
                 ];
             }),
