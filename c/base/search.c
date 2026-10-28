@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "base.c"
-#include "pattern.c"
+#include "grid.c"
 
 
 typedef struct LookupTableClauseFunc {
@@ -67,14 +67,14 @@ typedef struct ULP {
 
     struct {
         size_t var_count;
-        Variable* vars;
+        Variable** vars;
         size_t func_count;
-        ClauseFunc* funcs;
+        ClauseFunc** funcs;
         size_t clause_count;
-        Clause* clauses;
+        Clause** clauses;
     } graph;
 
-    Pattern grid;
+    Grid grid;
 
     struct {
 
@@ -94,11 +94,11 @@ static void s_sync_search_grid(void) {
     for (size_t t = 0; t < s.grid.gens; t++) {
         for (size_t y = 0; y < s.grid.height; y++) {
             for (size_t x = 0; x < s.grid.width; x++) {
-                Cell value = p_get(&s.grid, t, x, y);
+                Cell value = g_get(&s.grid, t, x, y);
                 if (c_is_var(value)) {
-                    Variable* var = &(s.graph.vars[value]);
+                    Variable* var = s.graph.vars[value];
                     if (var->value != V_UNKNOWN) {
-                        p_get(&s.grid, t, x, y) = v_to_c(var->value);
+                        g_get(&s.grid, t, x, y) = v_to_c(var->value);
                     }
                 }
             }

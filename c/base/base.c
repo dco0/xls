@@ -115,13 +115,13 @@ typedef enum StaticSymmetry {
 } StaticSymmetry;
 
 typedef struct Transformations {
-    bool flip_horizontal: 1;
-    bool flip_vertical: 1;
-    bool rotate_left: 1;
-    bool rotate_right: 1;
-    bool rotate_180: 1;
-    bool flip_diagonal: 1;
-    bool flip_anti_diagonal: 1;
+    bool flip_horizontal : 1;
+    bool flip_vertical : 1;
+    bool rotate_left : 1;
+    bool rotate_right : 1;
+    bool rotate_180 : 1;
+    bool flip_diagonal : 1;
+    bool flip_anti_diagonal : 1;
 } Transformations;
 
 static const StaticSymmetry STATIC_SYMMETRY_JOIN[10][10] = {
