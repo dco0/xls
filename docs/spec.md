@@ -94,7 +94,7 @@ clauses: 12
 
 [GRID]
 width = 2
-height = 2
+height = 1
 gens = 1
 data: 1
 2 3
