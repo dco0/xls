@@ -12,4 +12,5 @@
 !/install
 !/update
 !/build
+!/xls
 !/.clangd

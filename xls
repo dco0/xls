@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+pushd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" > /dev/null
+
+node --enable-source-maps ./lib/xls/index.js "$@"
+
+popd > /dev/null

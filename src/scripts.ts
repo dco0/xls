@@ -1,7 +1,5 @@
 
-// TO UNCOMMENT
-// @ts-ignore
-import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/src/core/index.js';
+import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/lib/core/index.js';
 import {XLSError, Cell, OFF, ON, UNKNOWN, LookupTableClauseFunc, ClauseFunc, Coord, coord, GridCell, gridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
 
 
