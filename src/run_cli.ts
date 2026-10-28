@@ -1,5 +1,6 @@
 
-import {XLSError} from './base.js';
+import {XLSError, ULP} from './base.js';
+import {runScript} from './scripts.js';
 
 
 const HELP_PREFIX = `
@@ -17,9 +18,9 @@ want to do for simple searches:
     ./xls <rule> <mode> <args>
     ./xls <minrule> <maxrule> <mode> <args>
 
+In all usages, options can be provided by prefixing them with a hyphen.
 Options:
 `.trim();
-
 
 type BaseOption<Name extends string> = {name: Name, desc: string, aliases: string[]};
 type FlagOption<Name extends string = string> = BaseOption<Name> & {type: 'flag'};
@@ -61,7 +62,11 @@ function customOption<Name extends string, Type>(name: Name, func: Validator<Typ
 }
 
 const OPTIONS = [
+
+    flagOption('help', 'Prints this help message', ['h']),
+
     numberOption('debug', `Sets the debug level`, ['d']),
+
 ] as const;
 
 type OptionData = typeof OPTIONS;
@@ -137,3 +142,51 @@ for (let i = 2; i < process.argv.length; i++) {
         throw new Error(`This error should not occur (invalid option: ${argData satisfies never})`);
     }
 }
+
+if (options.help) {
+    let msg = HELP_PREFIX;
+    for (let option of OPTIONS) {
+        let line = ' '.repeat(4);
+        for (let alias of option.aliases) {
+            if (alias.length === 1) {
+                line += `-${alias}, `;
+            } else {
+                line += `--${alias}, `;
+            }
+        }
+        line += `--${option.name}`;
+        if (option.type !== 'flag') {
+            line += `=<${option.type}>`;
+        }
+        line += `:`;
+        for (let word of option.desc.split(' ')) {
+            let oldLine = line;
+            line += ' ' + word;
+            if (line.length > 80) {
+                msg += oldLine + '\n';
+                line = ' '.repeat(8) + word;
+            }
+        }
+        msg += line;
+    }
+    console.log(msg);
+    process.exit(0);
+}
+
+
+async function searchForULP(ulp: ULP): Promise<void> {
+    throw new Error('FILL THIS FUNCTION IN');
+}
+
+
+if (posArgs[0] === 'script') {
+    if (posArgs.length !== 2) {
+        throw new XLSError(`Invalid number of arguments for script mode (expected 2, got ${posArgs.length})`);
+    }
+    let ulp = await runScript(posArgs[1]);
+    await searchForULP(ulp);
+    process.exit(0);
+}
+
+
+throw new XLSError(`Invalid invocation of XLS`);
