@@ -1,4 +1,7 @@
 
+import * as fs from 'node:fs/promises';
+import {join} from 'node:path';
+
 import {XLSError, ULP} from './base.js';
 import {runScript} from './scripts.js';
 
@@ -174,7 +177,10 @@ if (options.help) {
 }
 
 
+const BASE_PATH = import.meta.dirname;
+
 async function searchForULP(ulp: ULP): Promise<void> {
+    await fs.writeFile(join(BASE_PATH, 'search.txt'), ulp.toString());
     throw new Error('FILL THIS FUNCTION IN');
 }
 

@@ -28,6 +28,10 @@ export class LookupTableClauseFunc {
         this.table = new Array(ulp.maxStates ** varCount);
         this.table.fill(0);
     }
+
+    toString(): string {
+        return `${this.varCount} lookup_table ${this.table.join(' ')}`;
+    }
     
     copy(ulp?: ULP): LookupTableClauseFunc {
         let out = new LookupTableClauseFunc(ulp ?? this.ulp, this.varCount);
@@ -52,6 +56,10 @@ export class Clause {
         this.ulp = ulp;
         this.func = func;
         this.data = data;
+    }
+
+    toString(): string {
+        return `${this.ulp.funcs.indexOf(this.func)} ${this.data.join(' ')}`;
     }
 
     copy(ulp?: ULP, func?: LookupTableClauseFunc): Clause {
@@ -745,6 +753,15 @@ export class Options {
 
     periodic: {dx: number, dy: number, period: number} | undefined = undefined;
 
+    toString(): string {
+        let out: string[] = [];
+        if (this.periodic !== undefined) {
+            let {dx, dy, period} = this.periodic;
+            out.push(`periodic = (${dx}, ${dy})c/${period}`);
+        }
+        return out.join('\n');
+    }
+
     copy(): Options {
         let out = new Options();
         out.periodic = structuredClone(this.periodic);
@@ -771,6 +788,39 @@ export class ULP {
         this.maxStates = maxStates;
         this.grid = new Grid();
         this.options = new Options();
+    }
+
+    toString(): string {
+        return [
+            ``,
+            `max_states = ${this.maxStates}`,
+            ``,
+            `[GRAPH]`,
+            ``,
+            `var_count = ${this.varCount}`,
+            ``,
+            `funcs:`,
+            ...this.funcs.map(func => func.toString()),
+            ``,
+            `clauses:`,
+            ...this.clauses.map(clause => clause.toString()),
+            ``,
+            `[GRID]`,
+            ``,
+            `width = ${this.grid.width}`,
+            `height = ${this.grid.height}`,
+            `gens = ${this.grid.gens}`,
+            ``,
+            ...this.grid.data.flatMap(layer => {
+                return [
+                    ...layer.map(row => row.join(' ')),
+                    ``,
+                ];
+            }),
+            `[OPTIONS]`,
+            this.options.toString(),
+            ``,
+        ].join('\n');
     }
 
     copy(): ULP {
