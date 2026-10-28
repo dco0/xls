@@ -333,7 +333,7 @@ const BINARY_OPERATORS = new Set([
 type BinaryOperator = typeof BINARY_OPERATORS extends Set<infer T> ? T : never;
 
 
-const EOF = Symbol();
+const EOF = Symbol('EOF');
 type EOF = typeof EOF;
 
 type NewlineToken = ObjWithPos & {type: 'newline'};
@@ -474,6 +474,12 @@ class XLSScriptParser {
         this.code = code;
         this.ulp = ulp;
         this.tokens = this.tokenize(code);
+        // console.log(this.tokens.map(x => {
+        //     let y = structuredClone(x);
+        //     // @ts-ignore
+        //     delete y.pos;
+        //     return y;
+        // }));
         this.pos = 0;
     }
 
@@ -565,7 +571,11 @@ class XLSScriptParser {
             // undefined means whitespace
             return undefined;
         } else if (value.match(this.IDENTIFIER_REGEX)) {
-            return {pos, type: 'identifier', name: value};
+            if (KEYWORDS.has(value as Keyword)) {
+                return {pos, type: 'keyword', value: value as Keyword};
+            } else {
+                return {pos, type: 'identifier', name: value};
+            }
         } else if (value.match(this.NUMBER_REGEX)) {
             return {pos, type: 'number-literal', value: Number(value), raw: value};
         } else if (SYMBOLS.has(value as Symbol_)) {
@@ -694,9 +704,6 @@ class XLSScriptParser {
         }
         if (multiLineComment) {
             this.error(multiLineComment, `SyntaxError: Unterminated multi-line comment`);
-        }
-        if (out.length === 0) {
-            this.error({file, line: 1, col: 1}, `SyntaxError: Empty file`);
         }
         return out;
     }
@@ -853,6 +860,11 @@ class XLSScriptParser {
             let token = this.advance<'number-literal'>();
             let value: NumberValue = {pos: token.pos, type: 'number', value: token.value};
             return {pos: token.pos, type: 'simple-literal-expression', value};
+        } else if (this.match('string-literal')) {
+            // string literal
+            let token = this.advance<'string-literal'>();
+            let value: StringValue = {pos: token.pos, type: 'string', chars: token.value};
+            return {pos: token.pos, type: 'simple-literal-expression', value};
         } else if (this.match('nop')) {
             // 'nop' state specifier literal
             let token = this.advance();
@@ -878,7 +890,7 @@ class XLSScriptParser {
             this.eat(')');
             return out;
         } else {
-            this.error(undefined, `SyntaxError: Expected primary expression`);
+            this.error(undefined, `SyntaxError: Expected expression`);
         }
     }
 
@@ -898,6 +910,7 @@ class XLSScriptParser {
                         break;
                     }
                 }
+                this.eat(')');
                 value = {pos: token.pos, type: 'function-call-expression', func: value, args};
             } else {
                 // member expression
@@ -1146,7 +1159,10 @@ class XLSScriptParser {
         let token = this.eat('{');
         let data: Statement[] = [];
         while (!this.match('}')) {
-            data.push(this.statement());
+            let value = this.statement();
+            if (value !== undefined) {
+                data.push(value);
+            }
         }
         return {pos: token.pos, type: 'block-statement', data};
     }
@@ -1217,9 +1233,12 @@ class XLSScriptParser {
         return {pos: token.pos, type: 'while-statement', condition, value};
     }
 
-    statement(): Statement {
-        while (this.match(LINE_END)) {
+    statement(): Statement | undefined {
+        while (this.match(LINE_END) && !this.match(EOF)) {
             this.advance();
+        }
+        if (this.match(EOF)) {
+            return undefined;
         }
         let out: Statement;
         if (this.match('{')) {
@@ -1244,13 +1263,15 @@ class XLSScriptParser {
             while (!this.match(LINE_END)) {
                 if (this.match(':')) {
                     this.advance();
-                    while (this.match(LINE_END)) {
+                    while (this.match(LINE_END) && !this.match(EOF)) {
                         this.advance();
                     }
                     if (this.match('rle')) {
                         isRLEStatement = true;
                     }
                     break;
+                } else {
+                    this.advance();
                 }
             }
             this.pos = startPos;
@@ -1260,7 +1281,7 @@ class XLSScriptParser {
                 out = this.expressionStatement();
             }
         }
-        while (this.match(LINE_END)) {
+        while (this.match(LINE_END) && !this.match(EOF)) {
             this.advance();
         }
         return out;
@@ -1269,7 +1290,10 @@ class XLSScriptParser {
     async program(): Promise<Statement[]> {
         let out: Statement[] = [];
         while (this.pos < this.tokens.length) {
-            out.push(this.statement());
+            let value = this.statement();
+            if (value !== undefined) {
+                out.push(value);
+            }
         }
         return out;
     }
@@ -2145,6 +2169,7 @@ class XLSScriptRunner {
             }
         }
         this.ulp.addRuleClauses();
+        console.log(this.scope.vars);
         return this.ulp;
     }
 
@@ -2177,7 +2202,7 @@ addBuiltinFunction('set_rule', ['rule'], function(pos: Position, _rule?: Value):
 });
 
 
-export async function runScript(code: string, filePath: string = ''): Promise<ULP> {
+export async function runScript(code: string, filePath: string = '<anonymous>'): Promise<ULP> {
     let ulp = new ULP(2);
     let parser = new XLSScriptParser(filePath, code, ulp);
     let data = await parser.program();
@@ -2185,7 +2210,7 @@ export async function runScript(code: string, filePath: string = ''): Promise<UL
     return await runner.program(data);
 }
 
-export async function runFile(filePath: string): Promise<ULP> {
+export async function runScriptFromFile(filePath: string): Promise<ULP> {
     let fs = await import('node:fs/promises');
     let code = (await fs.readFile(filePath)).toString();
     return await runScript(code, filePath);

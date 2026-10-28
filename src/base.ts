@@ -819,7 +819,6 @@ export class ULP {
             }),
             `[OPTIONS]`,
             this.options.toString(),
-            ``,
         ].join('\n');
     }
 

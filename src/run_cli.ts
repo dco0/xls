@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import {join} from 'node:path';
 
 import {XLSError, ULP} from './base.js';
-import {runScript} from './scripts.js';
+import {runScriptFromFile} from './scripts.js';
 
 
 const HELP_PREFIX = `
@@ -22,6 +22,7 @@ want to do for simple searches:
     ./xls <minrule> <maxrule> <mode> <args>
 
 In all usages, options can be provided by prefixing them with a hyphen.
+
 Options:
 `.trim();
 
@@ -89,7 +90,7 @@ let posArgs: string[] = [];
 
 for (let i = 2; i < process.argv.length; i++) {
     let arg = process.argv[i];
-    if (!arg.match(/^-[-a-zA-Z]/)) {
+    if (!arg.match(/^-[-a-zA-Z0-9]/)) {
         posArgs.push(arg);
         continue;
     }
@@ -106,16 +107,17 @@ for (let i = 2; i < process.argv.length; i++) {
     while (arg.startsWith('-')) {
         arg = arg.slice(1);
     }
-    if (!(arg in OPTIONS)) {
+    let argData = optionsWithAliases[arg];
+    if (argData === undefined) {
         throw new XLSError(`Unrecognized option: '${arg}'`);
     }
-    let argData = optionsWithAliases[arg];
+    let key = argData.name;
     if (argData.type === 'flag') {
         if (value !== undefined) {
             throw new XLSError(`Cannot provide value for argument ${originalArg}, is a flag argument`);
         }
         // @ts-ignore
-        options[arg] = true;
+        options[key] = true;
     } else if (value === undefined) {
         throw new XLSError(`No value provided for argument ${originalArg} (to provide it, do '${originalArg}=<value>', not '${originalArg} value')`);
     } else if (argData.type === 'boolean') {
@@ -123,24 +125,24 @@ for (let i = 2; i < process.argv.length; i++) {
             throw new XLSError(`Invalid value for argument ${originalArg}, expected 'true' or 'false'`);
         }
         // @ts-ignore
-        options[arg] = value === 'true';
+        options[key] = value === 'true';
     } else if (argData.type === 'string') {
         // @ts-ignore
-        options[arg] = value;
+        options[key] = value;
     } else if (argData.type === 'number') {
         let num = Number(value);
         if (Number.isNaN(num)) {
             throw new XLSError(`Invalid numeric value for ${originalArg}: '${value}'`);
         }
         // @ts-ignore
-        options[arg] = num;
+        options[key] = num;
     } else if (argData.type === 'custom') {
         let out = await argData.func(value);
         if (out.isError) {
             throw new XLSError(`Invalid value for ${originalArg}: '${value}' (expected ${out.type}, ${out.reason})`);
         }
         // @ts-ignore
-        options[arg] = out.value;
+        options[key] = out.value;
     } else {
         throw new Error(`This error should not occur (invalid option: ${argData satisfies never})`);
     }
@@ -149,6 +151,7 @@ for (let i = 2; i < process.argv.length; i++) {
 if (options.help) {
     let msg = HELP_PREFIX;
     for (let option of OPTIONS) {
+        msg += `\n\n`;
         let line = ' '.repeat(4);
         for (let alias of option.aliases) {
             if (alias.length === 1) {
@@ -166,18 +169,19 @@ if (options.help) {
             let oldLine = line;
             line += ' ' + word;
             if (line.length > 80) {
-                msg += oldLine + '\n';
+                msg += `\n` + oldLine;
                 line = ' '.repeat(8) + word;
             }
         }
         msg += line;
     }
+    msg += `\n`;
     console.log(msg);
     process.exit(0);
 }
 
 
-const BASE_PATH = import.meta.dirname;
+const BASE_PATH = join(import.meta.dirname, '..');
 
 async function searchForULP(ulp: ULP): Promise<void> {
     await fs.writeFile(join(BASE_PATH, 'search.txt'), ulp.toString());
@@ -189,7 +193,7 @@ if (posArgs[0] === 'script') {
     if (posArgs.length !== 2) {
         throw new XLSError(`Invalid number of arguments for script mode (expected 2, got ${posArgs.length})`);
     }
-    let ulp = await runScript(posArgs[1]);
+    let ulp = await runScriptFromFile(posArgs[1]);
     await searchForULP(ulp);
     process.exit(0);
 }
