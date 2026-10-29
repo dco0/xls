@@ -10,9 +10,9 @@ export class XLSError extends Error {
 
 export type Cell = number;
 
-export const OFF: Cell = 0;
-export const ON: Cell = 1;
-export const UNKNOWN: Cell = -1;
+export const OFF = 0;
+export const ON = 1;
+export const UNKNOWN = -1;
 
 
 export class LookupTableClauseFunc {
@@ -110,10 +110,6 @@ export class Coord implements CoordLike {
 
 }
 
-export function coord(t: number, x: number, y: number): Coord {
-    return new Coord(t, x, y);
-}
-
 
 export class GridCell {
 
@@ -133,10 +129,6 @@ export class GridCell {
         return this.value === other.value && this.func === other.func;
     }
 
-}
-
-export function gridCell(value: Cell, func: ClauseFunc | undefined) {
-    return new GridCell(value, func);
 }
 
 
@@ -304,7 +296,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let pos = coord(t, x, y);
+                let pos = new Coord(t, x, y);
                 let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
                 x++;
                 if (x >= this.width) {
@@ -333,7 +325,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out: IteratorResult<Coord> = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: new Coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -361,7 +353,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out: IteratorResult<GridCell> = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -632,7 +624,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let pos = coord(t, x, y);
+                let pos = new Coord(t, x, y);
                 let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
                 x++;
                 if (x >= this.width) {
@@ -661,7 +653,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out: IteratorResult<Coord> = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: new Coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -689,7 +681,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out: IteratorResult<GridCell> = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -935,7 +927,7 @@ export class ULP {
         }
     }
 
-    resolveNegative1Unknowns(): void {
+    resolveNegativeOneUnknowns(): void {
         for (let cell of this.grid.cells()) {
             if (cell.value === UNKNOWN) {
                 cell.value = this.getNewVar();
@@ -961,13 +953,20 @@ export class ULP {
                 }
             }
         }
-        for (let cell of this.grid.cells()) {
-            cell.value = mapping[cell.value];
+        for (let gridCell of this.grid.cells()) {
+            let cell = gridCell.value;
+            if (cell in mapping) {
+                gridCell.value = mapping[cell];
+            } else {
+                let value = this.getNewVar();
+                gridCell.value = value;
+                mapping[cell] = value;
+            }
         }
     }
 
     normalize(): void {
-        this.resolveNegative1Unknowns();
+        this.resolveNegativeOneUnknowns();
         this.removeUnusedVars();
     }
 

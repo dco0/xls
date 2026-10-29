@@ -1,6 +1,6 @@
 
 import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/lib/core/index.js';
-import {XLSError, Cell, OFF, ON, UNKNOWN, ClauseFunc, Coord, coord, GridCell, gridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
+import {XLSError, Cell, OFF, ON, UNKNOWN, ClauseFunc, Coord, GridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
 
 
 interface Position {
@@ -1443,7 +1443,7 @@ class XLSScriptRunner {
 
     castToStateSpecifier(value: Value, whatFor: string): StateSpecifier {
         if (value.type === 'number') {
-            let cell = gridCell(value.value, this.getCurrentDefaultRuleFunc(value));
+            let cell = new GridCell(value.value, this.getCurrentDefaultRuleFunc(value));
             return {pos: value.pos, type: 'state_specifier', kind: 'cell', cell};
         } else if (value.type === 'state_specifier') {
             return value;
@@ -1477,7 +1477,11 @@ class XLSScriptRunner {
                 let cell = vars[(t + baseT) % vars.length];
                 let old = grid.get(t, x, y);
                 old.func = value.func;
-                this.wrappedReassign(pos, old.value, cell, coord(t, x, y));
+                if (old.value === -1) {
+                    old.value = cell;
+                } else {
+                    this.wrappedReassign(pos, old.value, cell, new Coord(t, x, y));
+                }
             }
             return;
         }
@@ -1486,11 +1490,14 @@ class XLSScriptRunner {
                 if (value.func !== undefined) {
                     grid.get(t, x, y).func = value.func;
                 }
-                // do nothing
             } else if (value.kind === 'cell') {
                 let old = grid.get(t, x, y);
                 old.func = value.cell.func;
-                this.wrappedReassign(pos, old.value, value.cell.value, coord(t, x, y));
+                if (old.value === -1) {
+                    old.value = value.cell.value;
+                } else {
+                    this.wrappedReassign(pos, old.value, value.cell.value, new Coord(t, x, y));
+                }
             } else {
                 throw new Error(`This error should not occur (invalid state specifier: ${value satisfies never})`);
             }
@@ -1635,21 +1642,21 @@ class XLSScriptRunner {
                     if (amount < 0) {
                         grid.shrink({right: -amount});
                     } else {
-                        grid.expand({right: amount}, gridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({right: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
                     }
                 } else if (left.key === 'height') {
                     let amount = value - grid.height;
                     if (amount < 0) {
                         grid.shrink({bottom: -amount});
                     } else {
-                        grid.expand({bottom: amount}, gridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({bottom: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
                     }
                 } else {
                     let amount = value - grid.gens;
                     if (amount < 0) {
                         grid.shrink({end: -amount});
                     } else {
-                        grid.expand({end: amount}, gridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({end: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
                     }
                 }
             }
@@ -1757,7 +1764,8 @@ class XLSScriptRunner {
                 let t = member.data[0];
                 let x = member.data[1];
                 let y = member.data[2];
-                return {pos, type: 'lvalue', kind: 'grid_coord', grid: value.grid, coord: coord(t, x, y)};
+                let coord = new Coord(t, x, y);
+                return {pos, type: 'lvalue', kind: 'grid_coord', grid: value.grid, coord};
             }
             this.error(node, `TypeError: Member '${memberStr}' does not exist in value of type '${value.type}'`);
         } else {
@@ -1944,7 +1952,7 @@ class XLSScriptRunner {
         } else if (node.type === 'simple-literal-expression') {
             return node.value;
         } else if (node.type === 'cell-literal-expression') {
-            let cell = gridCell(node.value, this.getCurrentDefaultRuleFunc(node));
+            let cell = new GridCell(node.value, this.getCurrentDefaultRuleFunc(node));
             return {pos: node.pos, type: 'state_specifier', kind: 'cell', cell};
         } else if (node.type === 'vector-literal-expression') {
             return this.vectorLiteralExpression(node);
@@ -2037,7 +2045,7 @@ class XLSScriptRunner {
             if (grid instanceof GridSlice) {
                 this.error(gridValue, `TypeError: RLE too big for grid slice (grid slices are not expandable, normal grids are)`);
             }
-            let cell = gridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(node.rle));
+            let cell = new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(node.rle));
             if (width > grid.width) {
                 grid.expand({right: width - grid.width}, cell);
             }
@@ -2162,7 +2170,7 @@ class XLSScriptRunner {
             cell.func = undefined;
         }
         // expand the grid to add in the background
-        let empty = gridCell(OFF, undefined);
+        let empty = new GridCell(OFF, undefined);
         grid.expand({top: 1, bottom: 1, left: 1, right: 1}, empty.copy());
         for (let t = 0; t < grid.gens; t++) {
             grid.set(t, 0, 0, bg.getAllowOOB(0, grid.width - 1, grid.height - 1) ?? empty.copy());
@@ -2201,7 +2209,7 @@ addBuiltinFunction('set_rule', ['rule'], function(pos: Position, _rule?: Value):
     }
     let func = this.ulp.addLookupTableClauseFunc(10);
     for (let i = 0; i < 1024; i++) {
-        func.table[i] = (trs[i >> 1] === (i & 1)) ? 1 : 0;
+        func.table[i] = (trs[i >> 1] === (i & 1)) ? 0 : 1;
     }
     this._currentDefaultRuleFunc = func;
     return {pos, type: 'null'};
