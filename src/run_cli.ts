@@ -184,7 +184,7 @@ if (options.help) {
 const BASE_PATH = join(import.meta.dirname, '..');
 
 async function searchForULP(ulp: ULP): Promise<void> {
-    await fs.writeFile(join(BASE_PATH, 'search.txt'), ulp.toString());
+    await fs.writeFile(join(BASE_PATH, 'search.ulp'), ulp.toString());
     throw new Error('FILL THIS FUNCTION IN');
 }
 
