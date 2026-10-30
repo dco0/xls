@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {XLSError, ULP} from './base.js';
 import {runScriptFromFile} from './scripts.js';
+import { execSync } from 'node:child_process';
 
 
 const HELP_PREFIX = `
@@ -20,6 +21,13 @@ The second is to use a preset mode, this is typically the one you
 want to do for simple searches:
     ./xls <rule> <mode> <args>
     ./xls <minrule> <maxrule> <mode> <args>
+
+Preset modes:
+
+    periodic <speed> <width> <height>
+        Searches for a periodic pattern of the given speed where all phases
+        (including the translated phase at the end of the period) fit within
+        a width by height box.
 
 In all usages, options can be provided by prefixing them with a hyphen.
 
@@ -70,6 +78,13 @@ const OPTIONS = [
     flagOption('help', 'Prints this help message', ['h']),
 
     numberOption('debug', `Sets the debug level`, ['d']),
+
+    flagOption('gcc', 'Use gcc instead of clang'),
+    flagOption('gdb', 'Run gdb when running it'),
+    flagOption('no-optimize', 'Disable optimization'),
+    flagOption('address-sanitizer', 'Enable address sanitizer (also enables -gcc)', ['asan']),
+
+    stringOption('file', 'Set a file to write the output to', ['f']),
 
 ] as const;
 
@@ -182,10 +197,103 @@ if (options.help) {
 
 
 const BASE_PATH = join(import.meta.dirname, '..');
+function getPath(path: string): string {
+    return join(BASE_PATH, path);
+}
+
+async function changeParams2IfNeeded(): Promise<void> {
+    let paramsFile = (await fs.readFile(getPath('c/base/params.h'))).toString();
+    const CONSTANT_DEFINES = new Set([
+        '_POSIX_C_SOURCE',
+    ]);
+    let defines: {[key: string]: undefined | string | number | boolean} = Object.create(null);
+    defines['DEBUG_LEVEL'] = options.debug ?? 0;
+    let params2Lines: string[] = [];
+    let foundDefines = new Set<string>();
+    for (let line of paramsFile.split('\n')) {
+        let indent = '';
+        while (line.startsWith(' ')) {
+            indent += line[0];
+            line = line.slice(1);
+        }
+        if (!(line.startsWith('#define ') || line.startsWith('// #define '))) {
+            params2Lines.push(indent + line);
+            continue;
+        }
+        let data = line.split(' ');
+        if (data[0] === '//') {
+            data = data.slice(1);
+        }
+        let name = data[1];
+        foundDefines.add(name);
+        if (!(name in defines)) {
+            if (CONSTANT_DEFINES.has(name)) {
+                params2Lines.push(indent + line);
+                continue;
+            } else {
+                throw new Error(`This error should not occur, please report it (unrecognized #define: '${name}')`);
+            }
+        }
+        if (CONSTANT_DEFINES.has(name)) {
+            throw new Error(`This error should not occur, please report it (constant #define redefined: '${name}')`);
+        }
+        let value = defines[name];
+        if (value === undefined) {
+            params2Lines.push(indent + '// ' + data.join(' '));
+        } else {
+            params2Lines.push(indent + `#define ${name} ${value}`);
+        }
+    }
+    for (let name of Object.keys(defines)) {
+        if (!foundDefines.has(name)) {
+            throw new Error(`This error should not occur, please report it (#define not found: '${name}')`);
+        }
+    }
+    for (let name of CONSTANT_DEFINES) {
+        if (!foundDefines.has(name)) {
+            throw new Error(`This error should not occur, please report it (#define not found: '${name}')`);
+        }
+    }
+    let params2File = params2Lines.join('');
+    let oldParams2File = (await fs.readFile(getPath('c/base/params2.h'))).toString();
+    if (params2File !== oldParams2File) {
+        await fs.writeFile(getPath('c/base/params2.h'), params2File);
+    }
+}
 
 async function searchForULP(ulp: ULP): Promise<void> {
-    await fs.writeFile(join(BASE_PATH, 'search.ulp'), ulp.toString());
-    throw new Error('FILL THIS FUNCTION IN');
+    await fs.writeFile(getPath('search.ulp'), ulp.toString());
+    await changeParams2IfNeeded();
+    let makeCmd = `make -f ${getPath('c//Makefile')}`;
+    if (options['address-sanitizer']) {
+        makeCmd += ` ASAN=1`;
+    }
+    if (options['no-optimize']) {
+        makeCmd += ` NO_OPTIMIZE=1`;
+    }
+    makeCmd += ` main`;
+    try {
+        execSync(`(cd ${BASE_PATH}; ${makeCmd})`, {stdio: ['inherit', 'ignore', 'inherit']});
+    } catch (error) {
+        process.exit(1);
+    }
+    let runCmd = `${getPath('c/xls_compiled')} '${getPath('search.ulp')}'`;
+    if (options['gdb']) {
+        runCmd = `gdb --args ${runCmd}`;
+        if (options['file']) {
+            throw new XLSError(`Cannot have 'gdb' and 'file' options at the same time`);
+        }
+    } else {
+        if (options['file']) {
+            runCmd = `stdbuf -oL ${runCmd} | tee '${options['file']}'`;
+        }
+    }
+    try {
+        execSync(runCmd, {stdio: 'inherit'});
+    } catch (error) {
+        // do nothing, the error will log to stderr anyway
+        return;
+    }
 }
 
 
@@ -198,5 +306,10 @@ if (posArgs[0] === 'script') {
     process.exit(0);
 }
 
+
+const MODES = ['periodic'];
+
+let rule = posArgs[0];
+let mode = posArgs[1];
 
 throw new XLSError(`Invalid invocation of XLS`);

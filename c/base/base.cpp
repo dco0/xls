@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "params.h"
+#include "params.hpp"
 
 
 // debugging
@@ -65,6 +65,8 @@
         real_fprintf(stderr, "Unexpected error: " format "\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__); \
         exit(EXIT_FAILURE); \
     } while (0)
+
+#define plural(value, str) (value), (value == 1 ? "" : str)
 
 // better allocation functions
 
@@ -124,30 +126,32 @@ typedef struct Transformations {
     bool flip_anti_diagonal : 1;
 } Transformations;
 
+//                 C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 
 static const StaticSymmetry STATIC_SYMMETRY_JOIN[10][10] = {
-    [C1 ] = {C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 },
-    [C2 ] = {C2 , C2 , C4 , D4p, D4p, D4x, D4x, D4p, D4x, D8 },
-    [C4 ] = {C4 , C4 , C4 , D8 , D8 , D8 , D8 , D8 , D8 , D8 },
-    [D2h] = {D2h, D4p, D8 , D2h, D4p, D8 , D8 , D4p, D8 , D8 },
-    [D2v] = {D2v, D4p, D8 , D4p, D2v, D8 , D8 , D4p, D8 , D8 },
-    [D2b] = {D2b, D4x, D8 , D8 , D8 , D2b, D4x, D8 , D4x, D8 },
-    [D2s] = {D2s, D4x, D8 , D8 , D8 , D4x, D2s, D8 , D4x, D8 },
-    [D4p] = {D4p, D4p, D8 , D4p, D4p, D8 , D8 , D4p, D8 , D8 },
-    [D4x] = {D4x, D4x, D8 , D8 , D8 , D4x, D4x, D8 , D4x, D8 },
-    [D8 ] = {D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 },
+    /* [C1 ] = */ {C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 },
+    /* [C2 ] = */ {C2 , C2 , C4 , D4p, D4p, D4x, D4x, D4p, D4x, D8 },
+    /* [C4 ] = */ {C4 , C4 , C4 , D8 , D8 , D8 , D8 , D8 , D8 , D8 },
+    /* [D2h] = */ {D2h, D4p, D8 , D2h, D4p, D8 , D8 , D4p, D8 , D8 },
+    /* [D2v] = */ {D2v, D4p, D8 , D4p, D2v, D8 , D8 , D4p, D8 , D8 },
+    /* [D2b] = */ {D2b, D4x, D8 , D8 , D8 , D2b, D4x, D8 , D4x, D8 },
+    /* [D2s] = */ {D2s, D4x, D8 , D8 , D8 , D4x, D2s, D8 , D4x, D8 },
+    /* [D4p] = */ {D4p, D4p, D8 , D4p, D4p, D8 , D8 , D4p, D8 , D8 },
+    /* [D4x] = */ {D4x, D4x, D8 , D8 , D8 , D4x, D4x, D8 , D4x, D8 },
+    /* [D8 ] = */ {D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 , D8 },
 };
 
+//                 C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 
 static const StaticSymmetry STATIC_SYMMETRY_MEET[10][10] = {
-    [C1 ] = {C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 },
-    [C2 ] = {C1 , C2 , C2 , C1 , C1 , C1 , C1 , C2 , C2 , C2 },
-    [C4 ] = {C1 , C2 , C4 , C1 , C1 , C1 , C1 , C2 , C2 , C4 },
-    [D2h] = {C1 , C1 , C1 , D2h, C1 , C1 , C1 , D2h, C1 , D2h},
-    [D2v] = {C1 , C1 , C1 , C1 , D2v, C1 , C1 , D2v, C1 , D2v},
-    [D2b] = {C1 , C1 , C1 , C1 , C1 , D2b, C1 , C1 , D2b, D2b},
-    [D2s] = {C1 , C1 , C1 , C1 , C1 , C1 , D2s, C1 , D2s, D2s},
-    [D4p] = {C1 , C2 , C2 , D2h, D2v, C1 , C1 , D4p, C2 , D4p},
-    [D4x] = {C1 , C2 , C2 , C1 , C1 , D2b, D2s, C2 , D4x, D4x},
-    [D8 ] = {C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 },
+    /* [C1 ] = */ {C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 , C1 },
+    /* [C2 ] = */ {C1 , C2 , C2 , C1 , C1 , C1 , C1 , C2 , C2 , C2 },
+    /* [C4 ] = */ {C1 , C2 , C4 , C1 , C1 , C1 , C1 , C2 , C2 , C4 },
+    /* [D2h] = */ {C1 , C1 , C1 , D2h, C1 , C1 , C1 , D2h, C1 , D2h},
+    /* [D2v] = */ {C1 , C1 , C1 , C1 , D2v, C1 , C1 , D2v, C1 , D2v},
+    /* [D2b] = */ {C1 , C1 , C1 , C1 , C1 , D2b, C1 , C1 , D2b, D2b},
+    /* [D2s] = */ {C1 , C1 , C1 , C1 , C1 , C1 , D2s, C1 , D2s, D2s},
+    /* [D4p] = */ {C1 , C2 , C2 , D2h, D2v, C1 , C1 , D4p, C2 , D4p},
+    /* [D4x] = */ {C1 , C2 , C2 , C1 , C1 , D2b, D2s, C2 , D4x, D4x},
+    /* [D8 ] = */ {C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 },
 };
 
 static bool static_symmetry_contains(StaticSymmetry container, StaticSymmetry value) {

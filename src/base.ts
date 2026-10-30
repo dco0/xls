@@ -409,7 +409,7 @@ export class Grid implements GridLike {
         this.gens = newGens;
     }
 
-    shrink({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}): void {
+    shrink({start = 0, end = 0, left = 0, right = 0, top = 0, bottom = 0}: {start?: number, end?: number, left?: number, right?: number, top?: number, bottom?: number}): void {
         let newWidth = this.width - left - right;
         let newHeight = this.height - top - bottom;
         let newGens = this.gens - start - end;
@@ -828,7 +828,7 @@ export class ULP {
                     ...layer.map(row => row.map(cell => cell.value).join(' ')),
                     ``,
                 ];
-            }),
+            }).flat(),
             `[OPTIONS]`,
             this.options.toString(),
         ].join('\n');
@@ -907,6 +907,7 @@ export class ULP {
     addRuleClauses(): void {
         let grid = this.grid;
         for (let [{t, x, y}, cell] of grid.entries()) {
+            // last generation is always noclause
             if (t === grid.gens - 1) {
                 continue;
             }
