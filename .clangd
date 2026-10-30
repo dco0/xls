@@ -3,28 +3,11 @@
 
 CompileFlags:
     Add: [
-        -Wall, -Werror, -Wpedantic, -Wextra,
-        -Wno-unused-variable, -Wno-unused-function, 
+        -std=c++23, -Wall, -Werror, -Wpedantic, -Wextra,
+        -Wno-unused-variable, -Wno-unused-function,
+        -Wno-c99-extensions, -Wno-gnu-empty-struct, -Wno-flexible-array-extensions,
     ]
 
 Diagnostics:
     UnusedIncludes: Strict
     MissingIncludes: Strict
-
----
-
-If:
-    PathMatch: [.*\.c$, .*\.h$]
-CompileFlags:
-    Add: [
-        -std=c23, -Wno-flexible-array-extensions
-    ]
-
----
-
-If:
-    PathMatch: [.*\.cpp$, .*\.hpp$]
-CompileFlags:
-    Add: [
-        -std=c++20
-    ]

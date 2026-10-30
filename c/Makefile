@@ -1,23 +1,10 @@
 
 ASAN ?= 0
 NO_OPTIMIZE ?= 0
-USE_GCC ?= 0
 
-ifeq ($(ASAN), 1)
-    CXX = g++
-else ifeq ($(USE_GCC), 1)
-    CXX = g++
-else
-    CXX = clang++
-endif
+CXX = clang++
 
-CXXFLAGS = -fdiagnostics-color=always -std=c++23 -Wall -Werror -Wpedantic -Wextra -Wno-unknown-pragmas -g
-
-ifeq ($(CXX), g++)
-    CXXFLAGS +=
-else
-    CXXFLAGS += -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-binary-literal
-endif
+CXXFLAGS = -fdiagnostics-color=always -std=c++23 -Wall -Werror -Wpedantic -Wextra -Wno-unknown-pragmas -Wno-c99-extensions -Wno-gnu-empty-struct -Wno-flexible-array-extensions -g
 
 ifneq ($(NO_OPTIMIZE), 1)
     CXXFLAGS += -O3 -march=native -mtune=native -flto -fno-stack-protector -fomit-frame-pointer

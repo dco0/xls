@@ -44,7 +44,7 @@ struct Clause;
 struct VarUse {
     Clause* clause;
     // for VLS backend trust me it needs it for the preprocessor too
-    int64_t change;
+    ptrdiff_t change;
 };
  
 struct Variable {

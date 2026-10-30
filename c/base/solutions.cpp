@@ -2,6 +2,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <optional>
@@ -205,6 +206,7 @@ static std::optional<std::string> unparse_transitions(const int* trs, const INTS
             }
         }
     }
+    return out;
 }
 
 // attempts to get the full rule using the given spec
@@ -384,14 +386,14 @@ static StaticSymmetry get_rule_static_symmetry() {
 
 
 static void print_grid_pretty(const Grid& grid, bool is_solution) {
-    const char* rule = get_rule(false).c_str();
+    std::string rule = get_rule(false);
     if (s.multi_rule) {
-        const char* maxrule = get_rule(false).c_str();
-        if (strcmp(rule, maxrule) != 0) {
-            printf("#C %s to %s\n", rule, maxrule);
+        std::string maxrule = get_rule(false);
+        if (rule != maxrule) {
+            printf("#C %s to %s\n", rule.c_str(), maxrule.c_str());
         }
     }
-    printf("x = %zu, y = %zu, rule = %s", grid.width, grid.height, rule);
+    printf("x = %zu, y = %zu, rule = %s", grid.width, grid.height, rule.c_str());
     // check for alternate printing method
     if (is_solution) {
         bool found = false;
@@ -506,7 +508,7 @@ static inline Hash update_hash(Hash hash, uint64_t value) {
     hash = update_hash(hash, (uint8_t)((value >> 32) & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 40) & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 48) & 0xff));
-    hash = update_hash(hash, value >> 56);
+    hash = update_hash(hash, (uint8_t)(value >> 56));
     return hash;
 }
 
