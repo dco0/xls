@@ -6,7 +6,7 @@ type encoding = [number, number][];
 // variable i in ULP maps to i-1 in CNF
 export function ULP_to_CNF(ulp: ULP): CNF {
     if (ulp.maxStates !== 2) throw new XLSError("max_states > 2 is not supported");
-    let funcs = ulp.funcs.map((func) => getPrimes(func.varCount, (i) => func.data[i] !== 0));
+    let funcs = ulp.funcs.map((func) => getPrimes(func.varCount, (i) => func.table[i] !== 0));
     return ulp.clauses.flatMap((clause) => createProp(clause.data.map((v) => v ? v : -1), funcs[ulp.funcs.indexOf(clause.func)]));
 }
 

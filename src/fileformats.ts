@@ -1,4 +1,4 @@
-import { XLSError, ULP, LookupTableClauseFunc, type ClauseFunc, type Options } from "./base.js";
+import { XLSError, ULP, LookupTableClauseFunc, type ClauseFunc, type Options, GridCell } from "./base.js";
 
 export enum FileFormat { ULP, CNF, LLS, INVALID };
 
@@ -38,8 +38,8 @@ function parseClauseFunc(ulp: ULP, cf: string) {
     let [a, b, ...c] = cf.split(" ");
     if (b === "lookup_table") {
         let lut = ulp.addLookupTableClauseFunc(parseInt(a));
-        if (c.length !== lut.data.length) throw new XLSError(`Incorrect number of looukp_table entries: expected ${lut.data.length}, got ${c.length}`);
-        lut.data = c.map((i) => parseInt(i));
+        if (c.length !== lut.table.length) throw new XLSError(`Incorrect number of looukp_table entries: expected ${lut.table.length}, got ${c.length}`);
+        lut.table = c.map((i) => parseInt(i));
     }
     else {
         throw new XLSError(`Unrecognized clause func: ${b}`);
@@ -64,8 +64,8 @@ export function loadULP(file: string): ULP {
         right: parseInt(blocks.GRID.keys.width),
         bottom: parseInt(blocks.GRID.keys.height),
         end: parseInt(blocks.GRID.keys.gens)
-    }, 0);
-    for (let t = 0; t < ulp.grid.gens; t++) for (let y = 0; y < ulp.grid.height; y++) for (let x = 0; x < ulp.grid.width; x++) ulp.grid.set(t, x, y, parseInt(blocks.GRID.blocks.data[y+t*ulp.grid.height].split(" ")[x]));
+    }, new GridCell(0, undefined));
+    for (let t = 0; t < ulp.grid.gens; t++) for (let y = 0; y < ulp.grid.height; y++) for (let x = 0; x < ulp.grid.width; x++) ulp.grid.set(t, x, y, new GridCell(parseInt(blocks.GRID.blocks.data[y+t*ulp.grid.height].split(" ")[x]), undefined));
     parseOptions(ulp.options, blocks.OPTIONS.keys);
     return ulp;
 }
