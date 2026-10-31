@@ -13,14 +13,14 @@
 #include "search.cpp"
 
 
-typedef struct INTSpec {
+struct INTSpec {
     int trs_count;
     int max_map_per_tr;
     int number_count;
     int max_letters_per_num;
     const char* letters[9];
     int16_t trs[51][49];
-} INTSpec;
+};
 
 const INTSpec normal_int = {
     .trs_count = 51,
@@ -464,9 +464,9 @@ static void print_grid_pretty(const Grid& grid, bool is_solution) {
 
 typedef uint64_t Hash;
 #define PRIhash PRIu64
-#define HASH_OFFSET UINT64_C(0xcbf29ce484222325)
-#define HASH_PRIME UINT64_C(0x00000100000001b3)
-#define MAX_HASH UINT64_MAX
+constexpr Hash HASH_OFFSET = 0xcbf29ce484222325ULL;
+constexpr Hash HASH_PRIME = 0x00000100000001b3ULL;
+constexpr Hash MAX_HASH = UINT64_MAX;
 
 static inline Hash update_hash(Hash hash, uint8_t value) {
     hash ^= value;

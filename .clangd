@@ -4,7 +4,9 @@
 CompileFlags:
     Add: [
         -std=c++23, -Wall, -Werror, -Wpedantic, -Wextra,
-        -Wno-unused-variable, -Wno-unused-function,
+        # linting disabling
+        -Wno-unused-variable, -Wno-unused-function, -Wno-undefined-internal,
+        # extension enabling
         -Wno-c99-extensions, -Wno-gnu-empty-struct, -Wno-flexible-array-extensions,
     ]
 

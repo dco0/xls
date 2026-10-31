@@ -12,59 +12,6 @@ extern int nanosleep(const struct timespec *__requested_time, struct timespec *_
 #include "grid.cpp"
 
 
-struct Variable;
-
-struct LookupTableClauseFunc {
-    Variable* table[];
-};
-
-enum ClauseFuncType {
-    CFT_LOOKUP_TABLE,
-};
-
-struct ClauseFunc {
-    size_t vars;
-    int type;
-    union {
-        LookupTableClauseFunc lookup_table;
-    } data;
-};
-
-enum VarValue {
-    V_UNKNOWN = 0,
-    V_OFF = 1,
-    V_ON = 2,
-};
-
-#define c_to_v(cell) ((cell) + 1)
-#define v_to_c(var) ((var) - 1)
-
-struct Clause;
-
-struct VarUse {
-    Clause* clause;
-    // for VLS backend trust me it needs it for the preprocessor too
-    ptrdiff_t change;
-};
- 
-struct Variable {
-    size_t number;
-    VarValue value;
-    size_t use_count;
-    VarUse uses[];
-};
-
-struct Clause {
-    size_t number;
-    bool removed;
-    ClauseFunc* func;
-    // for VLS backend trust me it needs it for the preprocessor too
-    uint64_t* implication_pointer;
-    size_t var_count;
-    Variable* vars[];
-};
-
-
 struct ULP {
 
     bool multi_rule;
@@ -137,6 +84,8 @@ static ULP s;
 
 
 struct {
+    size_t set_unknown_cells;
+    size_t start_unknown_cells;
     uintmax_t solutions_found;
     uintmax_t branches;
     double start_time;

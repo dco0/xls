@@ -9,6 +9,7 @@
 
 #include "../base/base.cpp"
 #include "../base/search.cpp"
+#include "stack.cpp"
 
 
 typedef uint64_t ImplicState[16];
@@ -77,7 +78,7 @@ static void init_implicstate_masks(void) {
             IMPLICSTATE_CELL_MASKS[pos][0][i] = UINT64_MAX;
         }
         for (int i = 0; i < 1024; i++) {
-            implicstate_set_bit(IMPLICSTATE_CELL_MASKS[pos][c_to_v((i >> pos) & 1)], i, 1);
+            implicstate_set_bit(IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue((i >> pos) & 1)], i, 1);
         }
     }
     for (int pos1 = 0; pos1 < 10; pos1++) {
@@ -194,7 +195,7 @@ static bool set_variable(Variable* var, VarValue value) {
     return true;
 }
 
-static void unset_cell(Variable* var) {
+static void unset_variable(Variable* var) {
     debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var->number, var->value));
     if (var->value == V_OFF) {
         for (size_t i = 0; i < var->use_count; i++) {
@@ -261,13 +262,13 @@ static inline bool check_cell_implications(Variable* var) {
 
 // set a cell in the search state, propagating checks
 // returns false if contradiction, true if no contradiction
-static bool set_var_and_propagate(Variable* var, VarValue value, bool is_explicit) {
+static bool set_variable_and_propagate(Variable* var, VarValue value, bool is_explicit) {
     debug(3, printf("Setting variable %zu and propagating: value = %i\n", var->number, value));
     if (var->value != V_UNKNOWN) {
         // unexpected_error("Setting known cell");
         return var->value == value;
     }
-    if (!set_cell_and_push(var, value, is_explicit)) {
+    if (!set_variable_and_push(var, value, is_explicit)) {
         return false;
     }
     return check_cell_implications(var);

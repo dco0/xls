@@ -96,9 +96,69 @@ static void safe_free(void* ptr) {
 // core type definitions
 
 typedef size_t Cell;
-#define C_OFF 0
-#define C_ON 1
-#define c_is_var(cell) ((cell) > 1)
+constexpr Cell C_OFF = 0;
+constexpr Cell C_ON = 1;
+
+[[gnu::always_inline]] static inline bool c_is_var(Cell cell) {
+    return cell > 1;
+}
+
+enum VarValue : uint8_t {
+    V_UNKNOWN = 0,
+    V_OFF = 1,
+    V_ON = 2,
+};
+
+[[gnu::always_inline]] static inline VarValue cell_to_varvalue(Cell cell) {
+    return (VarValue)(cell + 1);
+}
+
+[[gnu::always_inline]] static inline Cell varvalue_to_cell(VarValue value) {
+    return value - 1;
+}
+
+struct Variable;
+
+struct LookupTableClauseFunc {
+    Variable* table[];
+};
+
+enum ClauseFuncType : uint8_t {
+    CFT_LOOKUP_TABLE,
+};
+
+struct ClauseFunc {
+    size_t vars;
+    int type;
+    union {
+        LookupTableClauseFunc lookup_table;
+    } data;
+};
+
+struct Clause;
+
+struct VarUse {
+    Clause* clause;
+    // for VLS backend trust me it needs it for the preprocessor too
+    ptrdiff_t change;
+};
+ 
+struct Variable {
+    size_t number;
+    VarValue value;
+    size_t use_count;
+    VarUse uses[];
+};
+
+struct Clause {
+    size_t number;
+    bool removed;
+    ClauseFunc* func;
+    // for VLS backend trust me it needs it for the preprocessor too
+    uint64_t* implication_pointer;
+    size_t var_count;
+    Variable* vars[];
+};
 
 
 // symmetries and symmetry transformations
