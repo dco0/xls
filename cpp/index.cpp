@@ -1,10 +1,10 @@
 
 #include "cnf/index.cpp"
 
+#include "base/solutions.cpp"
 #include "vls/index.cpp"
 
 
-void destroy_all() {
-    cnf::destroy_all();
-    vls::destroy_all();
+int main(int argc, char** argv) {
+    solutions::init();
 }

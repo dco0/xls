@@ -6,10 +6,5 @@
 namespace vls {
 
 
-// placeholder to free everything
-void destroy_all() {
-
-}
-
 
 }

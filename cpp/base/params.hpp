@@ -9,7 +9,12 @@
 
 // basic options
 
+// debugging level
 #define DEBUG_LEVEL 6
+
+// maximum number of saved solutions
+static constexpr size_t MAX_SAVED_SOLUTION_HASHES = 1048576Z;
+
 
 
 // settings for the grid cache
