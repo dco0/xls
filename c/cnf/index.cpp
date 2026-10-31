@@ -60,6 +60,12 @@ namespace cnf {
         }
         cnf.erase(std::remove_if(cnf.begin(), cnf.end(), _vec_empty{}), cnf.end());
     }
+
+    // should free everything that needs to be freed
+    // placeholder
+    bool destroy_all() {
+
+    }
 } // namespace cnf
 
 CNF* cnf_encode(const ULP* ulp) {
