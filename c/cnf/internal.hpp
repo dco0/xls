@@ -3,9 +3,7 @@
 #include <vector>
 #include <algorithm>
 
-extern "C" {
-    #include "cnf.h"
-}
+#include "cnf.hpp"
 
 namespace cnf {
     typedef int lit;

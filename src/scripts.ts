@@ -1,8 +1,8 @@
 
-// TO UNCOMMENT
+// TO FIX
 // @ts-ignore
-import {LifewebError, IdentityPattern} from '../lifeweb/src/core/index.js';
-import {XLSError, Cell, OFF, ON, GridLike, Grid, GridSlice, ULP} from './base.js';
+import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/src/core/index.js';
+import {XLSError, Cell, OFF, ON, UNKNOWN, ClauseFunc, Coord, GridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
 
 
 interface Position {
@@ -11,8 +11,14 @@ interface Position {
     col: number;
 }
 
+const BUILTIN_POS = Object.freeze({file: '<builtin>', line: 1, col: 1} satisfies Position) as Position;
+
 function positionToString(pos: Position): string {
-    return `${pos.file}:${pos.line}:${pos.col}`;
+    if (pos === BUILTIN_POS) {
+        return `<builtin>`;
+    } else {
+        return `${pos.file}:${pos.line}:${pos.col}`;
+    }
 }
 
 type ObjWithPos = {pos: Position};
@@ -32,68 +38,91 @@ type BooleanValue = ObjWithPos & {type: 'boolean', value: boolean};
 type NumberValue = ObjWithPos & {type: 'number', value: number};
 type StringValue = ObjWithPos & {type: 'string', chars: number[]};
 
+function toStringChars(value: string): number[] {
+    return Array.from(value).map(x => x.codePointAt(0) as number);
+}
+
+function getStringValue(value: StringValue): string {
+    let out = '';
+    for (let char of value.chars) {
+        out += String.fromCharCode(char);
+    }
+    return out;
+}
+
+type Range = ObjWithPos & {type: 'range', start: number | undefined, end: number | undefined};
+
 type Vector = ObjWithPos & {type: 'vector', data: number[]};
 
-type Rangeable = number | Vector;
-type Range<T extends Rangeable = Rangeable> = ObjWithPos & {type: 'range'} & (
-    | (number extends T ? {kind: 'number', isInclusive: boolean, start: number, end: number} : never)
-    | (number extends T ? {kind: 'vector', isInclusive: boolean, start: Vector, end: Vector} : never)
-);
+type VectorRange = ObjWithPos & {type: 'vector_range', data: [number | undefined, number | undefined][]};
 
 // -1 is unknown
-type StateSpecifier = ObjWithPos & {type: 'state_specifier'} & (
-    | {kind: 'nop'}
-    | {kind: 'cell', cell: number}
-    | {kind: 'var', number: number}
-    | {kind: 'periodic', period: number}
-    | {kind: 'raw', value: Cell}
-) & {noclause?: boolean};
+type CellSpecifier = ObjWithPos & {type: 'cell_specifier'} & (
+    | {kind: 'nop', func: ClauseFunc | undefined}
+    | {kind: 'cell', cell: GridCell}
+    | {kind: 'periodic', period: number, func: ClauseFunc | undefined}
+);
 
-function stateSpecifiersAreEqual(x: StateSpecifier, y: StateSpecifier): boolean {
-    if (x.kind !== y.kind || x.noclause !== y.noclause) {
+function cellSpecifiersAreEqual(x: CellSpecifier, y: CellSpecifier): boolean {
+    if (x.kind !== y.kind) {
         return false;
     }
-    if (x.kind === 'nop' && y.kind === 'nop') {
-        return true;
-    } else if (x.kind === 'cell' && y.kind === 'cell') {
-        return x.cell === y.cell;
-    } else if (x.kind === 'periodic' && y.kind === 'periodic') {
-        return x.period === y.period;
-    } else if (x.kind === 'raw' && y.kind === 'raw') {
-        return x.value === y.value;
+    if (x.kind === 'nop') {
+        return y.kind === 'nop' && x.func === y.func;
+    } else if (x.kind === 'cell') {
+        return y.kind === 'cell' && x.cell.eq(y.cell);
+    } else if (x.kind === 'periodic') {
+        return y.kind === 'periodic' && x.period === y.period && x.func === y.func;
     } else {
-        throw new Error(`This error should not occur (invalid state specifier)`);
+        throw new Error(`This error should not occur (invalid cell specifier: ${x satisfies never})`);
     }
 }
 
-type FullStateSpecifierPart = {isRelative: boolean, gens: number[], value: StateSpecifier};
-type FullStateSpecifier = ObjWithPos & {type: 'full_state_specifier', parts: FullStateSpecifierPart[]};
+type FullCellSpecifierPart = {isRelative: boolean, gens: NumberValue | Range, value: CellSpecifier};
+type FullCellSpecifier = ObjWithPos & {type: 'full_cell_specifier', parts: FullCellSpecifierPart[]};
 
-type GridValue = ObjWithPos & {type: 'grid', grid: Grid, background: Grid, noclause: Grid};
-type GridSliceValue = ObjWithPos & {type: 'grid_slice', grid: GridSlice, background: GridSlice, noclause: GridSlice};
-type GridLikeValue = GridValue | GridSliceValue;
+type GridValue = ObjWithPos & {type: 'grid', grid: Grid};
+type GridSliceValue = ObjWithPos & {type: 'grid_slice', grid: GridSlice};
+
+type BuiltinFunctionFunc = (this: XLSScriptRunner, pos: Position, ...args: (Value | undefined)[]) => Value;
+type FunctionValue = ObjWithPos & {type: 'function', name: string} & (
+    | {builtin: false, closure: Scope, params: IdentifierToken[], body: BlockStatement}
+    | {builtin: true, params: string[], func: BuiltinFunctionFunc}
+) & {boundArgs?: Value[]};
 
 
 type BaseLvalue = ObjWithPos & {type: 'lvalue'};
 type IdentifierLvalue = BaseLvalue & {kind: 'identifier', scope: Scope, name: string};
 type StateLvalue = BaseLvalue & {kind: 'state', scope: Scope, value: number};
-type GridLvalueLike = {data: GridLikeValue, t: number, x: number, y: number};
-type GridLvalue = BaseLvalue & {kind: 'grid'} & GridLvalueLike;
-type BackgroundLvalue = BaseLvalue & {kind: 'background'} & GridLvalueLike;
-type NoclauseLvalue = BaseLvalue & {kind: 'noclause'} & GridLvalueLike;
+type GridCoordLvalue = BaseLvalue & {kind: 'grid_coord', grid: GridLike, coord: Coord};
 const GRID_MAGIC_KEYS = new Set([
     'height', 'width', 'gens',
 ] as const);
 type GridMagicKey = typeof GRID_MAGIC_KEYS extends Set<infer T> ? T : never;
-type GridMagicKeyLvalue = BaseLvalue & {kind: 'grid_key', data: GridLikeValue, key: GridMagicKey};
-type Lvalue = IdentifierLvalue | StateLvalue | GridLvalue | BackgroundLvalue | NoclauseLvalue | GridMagicKeyLvalue;
+type GridMagicKeyLvalue = BaseLvalue & {kind: 'grid_magic_key', grid: GridLike, key: GridMagicKey};
+type Lvalue = IdentifierLvalue | StateLvalue | GridCoordLvalue | GridMagicKeyLvalue;
 
-function resolveGridLvalueLike(data: GridLvalueLike): GridLvalueLike {
-    if (data.data.type === 'grid_slice') {
-        let t = data.t + data.data.grid.start.t;
-        let x = data.x + data.data.grid.start.x;
-        let y = data.y + data.data.grid.start.y;
-        return {data: data.data, t, x, y};
+function copyLvalue<T extends Lvalue>(value: T): T {
+    let pos = value.pos;
+    let out: Lvalue;
+    if (value.kind === 'identifier') {
+        out = {pos, type: 'lvalue', kind: 'identifier', scope: value.scope, name: value.name};
+    } else if (value.kind === 'state') {
+        out = {pos, type: 'lvalue', kind: 'state', scope: value.scope, value: value.value};
+    } else if (value.kind === 'grid_coord') {
+        out = {pos, type: 'lvalue', kind: 'grid_coord', grid: value.grid, coord: value.coord.copy()};
+    } else if (value.kind === 'grid_magic_key') {
+        out = {pos, type: 'lvalue', kind: 'grid_magic_key', grid: value.grid, key: value.key};
+    } else {
+        throw new Error(`This error should not occur (invalid value: ${value satisfies never})`);
+    }
+    return out as T;
+}
+
+function resolveGridCoordLvalue(data: GridCoordLvalue): {grid: GridLike, coord: Coord} {
+    if (data.grid instanceof GridSlice) {
+        let coord = data.coord.add(data.grid.start);
+        return {grid: data.grid, coord};
     } else {
         return data;
     }
@@ -104,15 +133,15 @@ function lvaluesAreEqual(x: Lvalue, y: Lvalue): boolean {
         return y.kind === 'identifier' && x.scope === y.scope && x.name === y.name;
     } else if (x.kind === 'state') {
         return y.kind === 'state' && x.scope === y.scope && x.value === y.value;
-    } else if (x.kind === 'grid' || x.kind === 'background' || x.kind === 'noclause') {
-        if (x.kind !== y.kind) {
+    } else if (x.kind === 'grid_coord') {
+        if (y.kind !== 'grid_coord') {
             return false;
         }
-        let x2 = resolveGridLvalueLike(x);
-        let y2 = resolveGridLvalueLike(y);
-        return x2.data === y2.data && x2.t === y2.t && x2.x === y2.x && x2.y === y2.y;
-    } else if (x.kind === 'grid_key') {
-        return y.kind === 'grid_key' && x.data === y.data && x.key === y.key;
+        let x2 = resolveGridCoordLvalue(x);
+        let y2 = resolveGridCoordLvalue(y);
+        return x2.grid === y2.grid && x2.coord.eq(y2.coord);
+    } else if (x.kind === 'grid_magic_key') {
+        return y.kind === 'grid_magic_key' && x.grid === y.grid && x.key === y.key;
     } else {
         throw new Error(`This error should not occur (invalid lvalue: ${x satisfies never})`);
     }
@@ -121,10 +150,56 @@ function lvaluesAreEqual(x: Lvalue, y: Lvalue): boolean {
 type Reference = ObjWithPos & {type: 'reference', value: Lvalue};
 
 
-type Value = NullValue | BooleanValue | NumberValue | StringValue | Vector | Range | StateSpecifier | FullStateSpecifier | GridValue | GridSliceValue | Reference;
+type Value = NullValue | BooleanValue | NumberValue | StringValue | Range | Vector | VectorRange | CellSpecifier | FullCellSpecifier | GridValue | GridSliceValue | FunctionValue | Reference;
 
 type ValueType = Value['type'];
 type ValueOfType<T extends ValueType> = Extract<Value, {type: T}>;
+
+function copyValue<T extends Value>(value: T): T {
+    let pos = value.pos;
+    let out: Value;
+    if (value.type === 'null' || value.type === 'boolean' || value.type === 'number' || value.type === 'string' || value.type === 'range' || value.type === 'vector' || value.type === 'vector_range') {
+        out = structuredClone(value);
+    } else if (value.type === 'cell_specifier') {
+        if (value.kind === 'nop') {
+            out = {pos, type: 'cell_specifier', kind: 'nop', func: value.func};
+        } else if (value.kind === 'cell') {
+            out = {pos, type: 'cell_specifier', kind: 'cell', cell: value.cell.copy()};
+        } else if (value.kind === 'periodic') {
+            out = {pos, type: 'cell_specifier', kind: 'periodic', period: value.period, func: value.func};
+        } else {
+            throw new Error(`This error should not occur (invalid cell specifier: ${value satisfies never})`);
+        }
+    } else if (value.type === 'full_cell_specifier') {
+        let parts: FullCellSpecifierPart[] = [];
+        for (let part of value.parts) {
+            parts.push({
+                gens: structuredClone(part.gens),
+                isRelative: part.isRelative,
+                value: copyValue(part.value),
+            });
+        }
+        out = {pos, type: 'full_cell_specifier', parts};
+    } else if (value.type === 'grid') {
+        out = {pos, type: 'grid', grid: value.grid};
+    } else if (value.type === 'grid_slice') {
+        out = {pos, type: 'grid_slice', grid: value.grid};
+    } else if (value.type === 'function') {
+        if (value.builtin) {
+            out = {pos, type: 'function', name: value.name, builtin: true, params: structuredClone(value.params), func: value.func};
+        } else {
+            out = {pos, type: 'function', name: value.name, builtin: false, closure: value.closure, params: structuredClone(value.params), body: value.body};
+        }
+        if (value.boundArgs) {
+            out.boundArgs = value.boundArgs.map(copyValue);
+        }
+    } else if (value.type === 'reference') {
+        out = {pos, type: 'reference', value: copyLvalue(value.value)};
+    } else {
+        throw new Error(`This error should not occur (invalid value: ${value satisfies never})`);
+    }
+    return out as T;
+}
 
 function valueIsTruthy(value: Value): boolean {
     if (value.type === 'null') {
@@ -135,22 +210,23 @@ function valueIsTruthy(value: Value): boolean {
         return value.value !== 0;
     } else if (value.type === 'string') {
         return value.chars.length > 0;
+    } else if (value.type === 'range') {
+        return value.start === undefined || value.end === undefined || value.start > value.end;
     } else if (value.type === 'vector') {
         return value.data.length > 0;
-    } else if (value.type === 'range') {
-        if (value.kind === 'number') {
-            return value.start > value.end;
-        } else {
-            let inclusiveModifier = value.isInclusive ? 1 : 0;
-            for (let i = 0; i < value.start.data.length; i++) {
-                if (value.end.data[i] + inclusiveModifier <= value.start.data[i]) {
-                    return false;
-                }
+    } else if (value.type === 'vector_range') {
+        for (let i = 0; i < value.data.length; i++) {
+            let item = value.data[i];
+            if (item[0] === undefined || item[1] === undefined) {
+                continue;
             }
-            return true;
+            if (item[1] > item[0]) {
+                return false;
+            }
         }
+        return true;
     } else {
-        value satisfies (StateSpecifier | FullStateSpecifier | GridValue | GridSliceValue | Reference);
+        value satisfies (CellSpecifier | FullCellSpecifier | GridValue | GridSliceValue | FunctionValue | Reference);
         return true;
     }
 }
@@ -170,6 +246,8 @@ function valuesAreEqual(x: Value, y: Value): boolean {
             }
         }
         return true;
+    } else if (x.type === 'range') {
+        return y.type === 'range' && x.start === y.start && x.end === y.end;
     } else if (x.type === 'vector') {
         if (y.type !== 'vector' || x.data.length !== y.data.length) {
             return false;
@@ -180,36 +258,21 @@ function valuesAreEqual(x: Value, y: Value): boolean {
             }
         }
         return true;
-    } else if (x.type === 'range') {
-        if (y.type !== 'range' || x.isInclusive !== y.isInclusive) {
+    } else if (x.type === 'vector_range') {
+        if (y.type !== 'vector_range' || x.data.length !== y.data.length) {
             return false;
         }
-        if (x.kind === 'number' && y.kind === 'number') {
-            return x.start === y.start && x.end === y.end;
-        } else if (x.kind === 'vector' && y.kind === 'vector') {
-            if (x.start.data.length !== y.start.data.length) {
+        for (let i = 0; i < x.data.length; i++) {
+            let xItem = x.data[i];
+            let yItem = y.data[i];
+            if (!(xItem[0] === yItem[0] && xItem[1] === yItem[1])) {
                 return false;
             }
-            for (let i = 0; i < x.start.data.length; i++) {
-                if (x.start.data[i] !== y.start.data[i]) {
-                    return false;
-                }
-            }
-            if (x.end.data.length !== y.end.data.length) {
-                return false;
-            }
-            for (let i = 0; i < x.end.data.length; i++) {
-                if (x.end.data[i] !== y.end.data[i]) {
-                    return false;
-                }
-            }
-            return true;
-        } else {
-            return false;
         }
-    } else if (x.type === 'state_specifier') {
-        return y.type === 'state_specifier' && stateSpecifiersAreEqual(x, y);
-    } else if (x.type === 'full_state_specifier' || x.type === 'grid' || x.type === 'grid_slice') {
+        return true;
+    } else if (x.type === 'cell_specifier') {
+        return y.type === 'cell_specifier' && cellSpecifiersAreEqual(x, y);
+    } else if (x.type === 'full_cell_specifier' || x.type === 'grid' || x.type === 'grid_slice' || x.type === 'function') {
         return x === y;
     } else if (x.type === 'reference') {
         return y.type === 'reference' && lvaluesAreEqual(x.value, y.value);
@@ -231,7 +294,7 @@ const KEYWORDS = new Set([
     // literals
     'null', 'true', 'false', 'nop', 'off', 'on', 'unknown', 'var', 'all',
     // operators
-    'state', 'noclause', 'yesclause', 'period',
+    'state', 'noclause', 'period', 'typeof',
     // statements
     'let', 'mut', 'if', 'else', 'for', 'while',
 ] as const);
@@ -245,7 +308,7 @@ const SYMBOLS = new Set([
     // unary operators
     '+', '-', '~', '!', '%', '&', '*',
     // arithmetic binary operators
-    '+', '-', '*', '/', '%', '<<', '>>', '&', '^', '|', '..<', '..=',
+    '+', '-', '*', '/', '%', '<<', '>>', '&', '^', '|', '..', '..=',
     // boolean binary operators
     '<', '<=', '>', '>=', '==', '!=', '&&', '||', '^^', '??', '?', ':',
     // assignment operators
@@ -255,19 +318,19 @@ type Symbol_ = typeof SYMBOLS extends Set<infer T> ? T : never;
 
 const UNARY_OPERATORS = new Set([
     '+', '-', '~', '!', '&', '*',
-    'state', 'noclause', 'yesclause', 'period',
+    'state', 'noclause', 'period', 'typeof',
 ] as const);
 type UnaryOperator = typeof UNARY_OPERATORS extends Set<infer T> ? T : never;
 
 const BINARY_OPERATORS = new Set([
-    '+', '-', '*', '/', '%', '<<', '>>', '&', '^', '|', '..<', '..=',
+    '+', '-', '*', '/', '%', '<<', '>>', '&', '^', '|',
     '<', '<=', '>', '>=', '==', '!=', '&&', '||', '^^', '??',
     '=',
 ] as const);
 type BinaryOperator = typeof BINARY_OPERATORS extends Set<infer T> ? T : never;
 
 
-const EOF = Symbol();
+const EOF = Symbol('EOF');
 type EOF = typeof EOF;
 
 type NewlineToken = ObjWithPos & {type: 'newline'};
@@ -368,23 +431,25 @@ function matcherToString(matcher: Matcher): string {
 
 type IdentifierExpression = ObjWithPos & {type: 'identifier-expression', name: string};
 type SimpleLiteralExpression = ObjWithPos & {type: 'simple-literal-expression', value: Value};
+type CellLiteralExpression = ObjWithPos & {type: 'cell-literal-expression', value: number};
 type VectorLiteralExpression = ObjWithPos & {type: 'vector-literal-expression', data: Expression[]};
 type FunctionCallExpression = ObjWithPos & {type: 'function-call-expression', func: Expression, args: Expression[]};
 type MemberExpression = ObjWithPos & {type: 'member-expression', value: Expression, member: IdentifierToken | Expression};
 type UnaryExpression = ObjWithPos & {type: 'unary-expression', op: UnaryOperator, value: Expression};
+type RangeExpression = ObjWithPos & {type: 'range-expression', isInclusive: boolean, start: Expression | undefined, end: Expression | undefined};
 type BinaryExpression = ObjWithPos & {type: 'binary-expression', op: BinaryOperator, left: Expression, right: Expression};
-type FullStateSpecifierExpressionPart = ObjWithPos & {type: 'full-state-specifier-expression-part', isRelative: boolean, gens: KeywordToken<'all'> | Expression, value: Expression};
-type FullStateSpecifierExpression = ObjWithPos & {type: 'full-state-specifier-expression', parts: FullStateSpecifierExpressionPart[]};
+type FullCellSpecifierExpressionPart = ObjWithPos & {type: 'full-state-specifier-expression-part', isRelative: boolean, gens: Expression, value: Expression};
+type FullCellSpecifierExpression = ObjWithPos & {type: 'full-state-specifier-expression', parts: FullCellSpecifierExpressionPart[]};
 type ConditionalExpression = ObjWithPos & {type: 'conditional-expression', condition: Expression, ifTrue: Expression, ifFalse: Expression};
-type Expression = IdentifierExpression | SimpleLiteralExpression | VectorLiteralExpression | FunctionCallExpression | MemberExpression | UnaryExpression | BinaryExpression | FullStateSpecifierExpression | ConditionalExpression;
-type AnyExpressionNode = Expression | FullStateSpecifierExpressionPart;
+type Expression = IdentifierExpression | SimpleLiteralExpression | CellLiteralExpression | VectorLiteralExpression | FunctionCallExpression | MemberExpression | UnaryExpression | RangeExpression | BinaryExpression | FullCellSpecifierExpression | ConditionalExpression;
+type AnyExpressionNode = Expression | FullCellSpecifierExpressionPart;
 
 type ExpressionStatement = ObjWithPos & {type: 'expression-statement', expr: Expression};
 type BlockStatement = ObjWithPos & {type: 'block-statement', data: Statement[]};
-type RLEStatement = ObjWithPos & {type: 'rle-statement', grid: Expression, gen?: Expression, rle: RLEToken};
+type RLEStatement = ObjWithPos & {type: 'rle-statement', grid: Expression, gens?: Expression, rle: RLEToken};
 type VariableDeclarationStatement = ObjWithPos & {type: 'variable-declaration-statement', mut: boolean, name: string, value?: Expression};
 type IfStatement = ObjWithPos & {type: 'if-statement', condition: Expression, ifTrue: BlockStatement, ifFalse?: BlockStatement};
-type ForStatement = ObjWithPos & {type: 'for-statement', name: IdentifierToken, iterateOver: Expression, value: BlockStatement};
+type ForStatement = ObjWithPos & {type: 'for-statement', mut: boolean, name: IdentifierToken, iterateOver: Expression, value: BlockStatement};
 type WhileStatement = ObjWithPos & {type: 'while-statement', condition: Expression, value: BlockStatement};
 type Statement = ExpressionStatement | BlockStatement | RLEStatement | VariableDeclarationStatement | IfStatement | ForStatement | WhileStatement;
 type AnyStatementNode = Statement;
@@ -395,15 +460,24 @@ type NodeType = Node['type'];
 
 class XLSScriptParser {
 
+    readonly ulp: ULP;
+
     currentFilePath: string;
     code: string;
     tokens: Token[];
     pos: number;
 
-    constructor(filePath: string, code: string) {
+    constructor(filePath: string, code: string, ulp: ULP) {
         this.currentFilePath = filePath;
         this.code = code;
+        this.ulp = ulp;
         this.tokens = this.tokenize(code);
+        // console.log(this.tokens.map(x => {
+        //     let y = structuredClone(x);
+        //     // @ts-ignore
+        //     delete y.pos;
+        //     return y;
+        // }));
         this.pos = 0;
     }
 
@@ -415,14 +489,13 @@ class XLSScriptParser {
         }
     }
 
-    error(pos: HasPos | undefined, msg: string): never {
+    error(pos: HasPos | undefined, type: string, msg: string): never {
         if (pos === undefined) {
             pos = this.getCurrentPosition();
         } else if ('pos' in pos) {
             pos = pos.pos;
         }
-        let trace: string[] = [];
-        let text = `${msg}\n    at ${positionToString(pos)}`;
+        let text = `${type}: ${msg}\n    at ${positionToString(pos)}`;
         throw new XLSScriptError(text);
     }
 
@@ -459,7 +532,7 @@ class XLSScriptParser {
     }
 
     parseStringLiteral(value: string): number[] | false {
-        if (!(value.startsWith('"') && value.endsWith('"'))) {
+        if (!((value.startsWith('"') && value.endsWith('"')) || (value.startsWith(`'`) && value.endsWith(`'`)))) {
             return false;
         }
         let out: number[] = [];
@@ -496,7 +569,11 @@ class XLSScriptParser {
             // undefined means whitespace
             return undefined;
         } else if (value.match(this.IDENTIFIER_REGEX)) {
-            return {pos, type: 'identifier', name: value};
+            if (KEYWORDS.has(value as Keyword)) {
+                return {pos, type: 'keyword', value: value as Keyword};
+            } else {
+                return {pos, type: 'identifier', name: value};
+            }
         } else if (value.match(this.NUMBER_REGEX)) {
             return {pos, type: 'number-literal', value: Number(value), raw: value};
         } else if (SYMBOLS.has(value as Symbol_)) {
@@ -615,7 +692,7 @@ class XLSScriptParser {
                     }
                 }
                 if (!found) {
-                    this.error(pos, `SyntaxError: Cannot parse input into token`);
+                    this.error(pos, 'SyntaxError', `Cannot parse input into token`);
                 }
             }
             for (let token of currentLine) {
@@ -624,10 +701,7 @@ class XLSScriptParser {
             out.push({pos: Object.freeze({file, line: lineNumber, col}), type: 'newline'});
         }
         if (multiLineComment) {
-            this.error(multiLineComment, `SyntaxError: Unterminated multi-line comment`);
-        }
-        if (out.length === 0) {
-            this.error({file, line: 1, col: 1}, `SyntaxError: Empty file`);
+            this.error(multiLineComment, 'SyntaxError', `Unterminated multi-line comment`);
         }
         return out;
     }
@@ -635,7 +709,7 @@ class XLSScriptParser {
     peek<T extends Exclude<Matcher, EOF> = Exclude<Matcher, EOF>>(): MatcherReturnType<T> {
         let out = this.tokens[this.pos];
         if (out === undefined) {
-            this.error(undefined, `SyntaxError: Unexpected end of input`);
+            this.error(undefined, 'SyntaxError', `Unexpected end of input`);
         } else {
             return out as MatcherReturnType<T>;
         }
@@ -648,7 +722,7 @@ class XLSScriptParser {
     advance<T extends Exclude<Matcher, EOF> = Exclude<Matcher, EOF>>(): MatcherReturnType<T> {
         let out = this.tokens[this.pos];
         if (out === undefined) {
-            this.error(undefined, `SyntaxError: Unexpected end of input`);
+            this.error(undefined, 'SyntaxError', `Unexpected end of input`);
         } else {
             this.pos++;
             return out as MatcherReturnType<T>;
@@ -705,7 +779,7 @@ class XLSScriptParser {
             let token = (this.tokens[this.pos + i] ?? EOF) as Token | EOF;
             let matcher = data[i];
             if (!this._match(token, matcher)) {
-                this.error(undefined, `SyntaxError: Expected ${matcherToString(matcher)}, got ${tokenToString(token)}`);;
+                this.error(undefined, 'SyntaxError', `Expected ${matcherToString(matcher)}, got ${tokenToString(token)}`);
             }
         }
     }
@@ -740,7 +814,24 @@ class XLSScriptParser {
         }
     }
 
-    nextVarValueNumber: number = 0;
+    expressionOrVectorLiteral(vectorPos: Position): Expression {
+        let value = this.expression();
+        if (!this.match(',')) {
+            return value;
+        }
+        this.advance();
+        let data: Expression[] = [value];
+        while (true) {
+            data.push(this.expression());
+            if (this.match(',')) {
+                this.advance();
+                continue;
+            } else {
+                break;
+            }
+        }
+        return {pos: vectorPos, type: 'vector-literal-expression', data};
+    }
 
     primaryExpression(): Expression {
         if (this.match('identifier')) {
@@ -767,54 +858,42 @@ class XLSScriptParser {
             let token = this.advance<'number-literal'>();
             let value: NumberValue = {pos: token.pos, type: 'number', value: token.value};
             return {pos: token.pos, type: 'simple-literal-expression', value};
+        } else if (this.match('string-literal')) {
+            // string literal
+            let token = this.advance<'string-literal'>();
+            let value: StringValue = {pos: token.pos, type: 'string', chars: token.value};
+            return {pos: token.pos, type: 'simple-literal-expression', value};
         } else if (this.match('nop')) {
-            // 'nop' state specifier literal
+            // 'nop' cell specifier literal
             let token = this.advance();
-            let value: StateSpecifier = {pos: token.pos, type: 'state_specifier', kind: 'nop'};
+            let value: CellSpecifier = {pos: token.pos, type: 'cell_specifier', kind: 'nop', func: undefined};
             return {pos: token.pos, type: 'simple-literal-expression', value};
-        } else if (this.match(['off', 'on', 'unknown'])) {
-            // basic state specifier literal
-            let token = this.advance() as KeywordToken<'off' | 'on' | 'unknown'>;
-            let cell: number;
+        } else if (this.match(['off', 'on', 'unknown', 'var'])) {
+            // basic cell specifier literal
+            let token = this.advance() as KeywordToken<'off' | 'on' | 'unknown' | 'var'>;
+            let value: number;
             if (token.value === 'off') {
-                cell = 0;
+                value = OFF;
             } else if (token.value === 'on') {
-                cell = 1;
+                value = ON;
+            } else if (token.value === 'unknown') {
+                value = UNKNOWN;
             } else {
-                cell = -1;
+                value = this.ulp.getNewVar();
             }
-            let value: StateSpecifier = {pos: token.pos, type: 'state_specifier', kind: 'cell', cell};
-            return {pos: token.pos, type: 'simple-literal-expression', value};
-        } else if (this.match('var')) {
-            // 'var' state specifier literal
+            return {pos: token.pos, type: 'cell-literal-expression', value};
+        } else if (this.match('all')) {
+            // 'all' range literal
             let token = this.advance();
-            let number = this.nextVarValueNumber++;
-            let value: StateSpecifier = {pos: token.pos, type: 'state_specifier', kind: 'var', number};
+            let value: Range = {pos: token.pos, type: 'range', start: undefined, end: undefined};
             return {pos: token.pos, type: 'simple-literal-expression', value};
         } else if (this.match('(')) {
             let token = this.advance();
-            // parenthesized expression
-            let value = this.expression();
-            if (!this.match(',')) {
-                this.eat(')');
-                return value;   
-            }
-            // vector literal
-            this.advance();
-            let data: Expression[] = [value];
-            while (true) {
-                data.push(this.expression());
-                if (this.match(',')) {
-                    this.advance();
-                    continue;
-                } else {
-                    break;
-                }
-            }
+            let out = this.expressionOrVectorLiteral(token.pos);
             this.eat(')');
-            return {pos: token.pos, type: 'vector-literal-expression', data};
+            return out;
         } else {
-            this.error(undefined, `SyntaxError: Expected primary expression`);
+            this.error(undefined, 'SyntaxError', `Expected expression`);
         }
     }
 
@@ -834,6 +913,7 @@ class XLSScriptParser {
                         break;
                     }
                 }
+                this.eat(')');
                 value = {pos: token.pos, type: 'function-call-expression', func: value, args};
             } else {
                 // member expression
@@ -845,10 +925,10 @@ class XLSScriptParser {
                         let token = this.advance<'keyword'>();
                         member = {pos: token.pos, type: 'identifier', name: token.value};
                     } else {
-                        this.error(undefined, `SyntaxError: Expected identifier or keyword`);
+                        this.error(undefined, 'SyntaxError', `Expected identifier or keyword`);
                     }
                 } else {
-                    member = this.expression();
+                    member = this.expressionOrVectorLiteral(token.pos);
                     this.eat(']');
                 }
                 value = {pos: token.pos, type: 'member-expression', value, member};
@@ -868,13 +948,23 @@ class XLSScriptParser {
     }
 
     rangeExpression(): Expression {
-        let left = this.unaryExpression();
-        while (this.match(['..<', '..='])) {
-            let op = this.advance<'..<' | '..='>();
-            let right = this.unaryExpression();
-            left = {pos: op.pos, type: 'binary-expression', op: op.value, left, right};
+        let op: SymbolToken<'..' | '..='>;
+        let start: Expression | undefined;
+        let end: Expression | undefined;
+        if (this.match(['..', '..='])) {
+            op = this.advance<'..' | '..='>();
+            start = undefined;
+            end = this.unaryExpression();
+        } else {
+            start = this.unaryExpression();
+            if (!this.match(['..', '..='])) {
+                return start;
+            }
+            op = this.advance<'..' | '..='>();
+            end = this.try(this.unaryExpression);
         }
-        return left;
+        let isInclusive = op.value === '..=';
+        return {pos: op.pos, type: 'range-expression', isInclusive, start, end};
     }
 
     multiplicativeExpression(): Expression {
@@ -997,24 +1087,19 @@ class XLSScriptParser {
         return left;
     }
 
-    fullStateSpecifierExpressionPart(): FullStateSpecifierExpressionPart {
+    fullCellSpecifierExpressionPart(): FullCellSpecifierExpressionPart {
         let isRelative = false;
         if (this.match('%')) {
             this.advance();
             isRelative = true;
         }
-        let gens: KeywordToken<'all'> | Expression;
-        if (this.match('all')) {
-            gens = this.advance<'all'>();
-        } else {
-            gens = this.rangeExpression();
-        }
+        let gens = this.rangeExpression();
         let colon = this.eat(':');
         let value = this.defaultToExpression();
         return {pos: colon.pos, type: 'full-state-specifier-expression-part', isRelative, gens, value};
     }
 
-    fullStateSpecifierExpression(): Expression {
+    fullCellSpecifierExpression(): Expression {
         let isSpecifier = false;
         let startPos = this.pos;
         try {
@@ -1032,9 +1117,9 @@ class XLSScriptParser {
             return this.logicalORExpression();
         }
         let pos = this.getCurrentPosition();
-        let parts: FullStateSpecifierExpressionPart[] = [];
+        let parts: FullCellSpecifierExpressionPart[] = [];
         while (true) {
-            parts.push(this.fullStateSpecifierExpressionPart());
+            parts.push(this.fullCellSpecifierExpressionPart());
             if (this.match(',')) {
                 this.advance();
                 continue;
@@ -1082,7 +1167,10 @@ class XLSScriptParser {
         let token = this.eat('{');
         let data: Statement[] = [];
         while (!this.match('}')) {
-            data.push(this.statement());
+            let value = this.statement();
+            if (value !== undefined) {
+                data.push(value);
+            }
         }
         return {pos: token.pos, type: 'block-statement', data};
     }
@@ -1090,10 +1178,10 @@ class XLSScriptParser {
     rleStatement(): Statement {
         let pos = this.getCurrentPosition();
         let grid = this.expression();
-        let gen: Expression | undefined = undefined;
+        let gens: Expression | undefined = undefined;
         if (this.match(':')) {
             this.advance();
-            gen = this.expression();
+            gens = this.expression();
         }
         this.eat(':');
         this.eat('newline');
@@ -1102,7 +1190,7 @@ class XLSScriptParser {
         }
         let rle = this.eat('rle');
         this.eat(LINE_END);
-        return {pos, type: 'rle-statement', grid, gen, rle};
+        return {pos, type: 'rle-statement', grid, gens, rle};
     }
 
     variableDeclarationStatement(): Statement {
@@ -1119,7 +1207,7 @@ class XLSScriptParser {
             value = this.expression();
         }
         if (!mut && value === undefined) {
-            this.error(undefined, `SyntaxError: Non-mutable variable declarations must include an initializer`);
+            this.error(undefined, 'SyntaxError', `Non-mutable variable declarations must include an initializer`);
         }
         this.eat(LINE_END);
         return {pos: token.pos, type: 'variable-declaration-statement', mut, name, value};
@@ -1127,9 +1215,7 @@ class XLSScriptParser {
 
     ifStatement(): Statement {
         let token = this.eat('if');
-        this.eat('(');
         let condition = this.expression();
-        this.eat(')');
         let ifTrue = this.blockStatement();
         let ifFalse: BlockStatement | undefined = undefined;
         if (this.match('else')) {
@@ -1141,25 +1227,31 @@ class XLSScriptParser {
 
     forStatement(): Statement {
         let token = this.eat('for');
+        let mut = false;
+        if (this.match('mut')) {
+            this.advance();
+            mut = true;
+        }
         let name = this.eat('identifier');
         this.eat('identifier in');
         let iterateOver = this.expression();
         let value = this.blockStatement();
-        return {pos: token.pos, type: 'for-statement', name, iterateOver, value};
+        return {pos: token.pos, type: 'for-statement', mut, name, iterateOver, value};
     }
 
     whileStatement(): Statement {
         let token = this.eat('while');
-        this.eat('(');
         let condition = this.expression();
-        this.eat(')');
         let value = this.blockStatement();
         return {pos: token.pos, type: 'while-statement', condition, value};
     }
 
-    statement(): Statement {
-        while (this.match(LINE_END)) {
+    statement(): Statement | undefined {
+        while (this.match(LINE_END) && !this.match(EOF)) {
             this.advance();
+        }
+        if (this.match(EOF)) {
+            return undefined;
         }
         let out: Statement;
         if (this.match('{')) {
@@ -1184,13 +1276,15 @@ class XLSScriptParser {
             while (!this.match(LINE_END)) {
                 if (this.match(':')) {
                     this.advance();
-                    while (this.match(LINE_END)) {
+                    while (this.match(LINE_END) && !this.match(EOF)) {
                         this.advance();
                     }
                     if (this.match('rle')) {
                         isRLEStatement = true;
                     }
                     break;
+                } else {
+                    this.advance();
                 }
             }
             this.pos = startPos;
@@ -1200,7 +1294,7 @@ class XLSScriptParser {
                 out = this.expressionStatement();
             }
         }
-        while (this.match(LINE_END)) {
+        while (this.match(LINE_END) && !this.match(EOF)) {
             this.advance();
         }
         return out;
@@ -1209,7 +1303,10 @@ class XLSScriptParser {
     async program(): Promise<Statement[]> {
         let out: Statement[] = [];
         while (this.pos < this.tokens.length) {
-            out.push(this.statement());
+            let value = this.statement();
+            if (value !== undefined) {
+                out.push(value);
+            }
         }
         return out;
     }
@@ -1227,7 +1324,7 @@ class Scope {
     runner: XLSScriptRunner;
     parent: Scope | undefined;
     vars: Map<string, Variable>;
-    states: Map<number, FullStateSpecifier>;
+    states: Map<number, FullCellSpecifier>;
 
     constructor(runner: XLSScriptRunner, parent: Scope | undefined) {
         this.runner = runner;
@@ -1243,7 +1340,12 @@ class Scope {
         } else if (this.parent) {
             return this.parent.getVar(pos, name);
         } else {
-            this.runner.error(pos, `NameError: Variable ${name} is not defined`);
+            let value = BUILTIN_GLOBALS.get(name);
+            if (value !== undefined) {
+                return {mut: false, value};
+            } else {
+                this.runner.error(pos, 'NameError', `Variable ${name} is not defined`);
+            }
         }
     }
 
@@ -1255,28 +1357,28 @@ class Scope {
         let data = this.vars.get(name);
         if (data !== undefined) {
             if (!data.mut) {
-                this.runner.error(pos, `NameError: Variable ${name} is not mutable`);
+                this.runner.error(pos, 'NameError', `Variable ${name} is not mutable`);
             }
             this.vars.set(name, {mut: data.mut, value});
         } else if (this.parent) {
             this.parent.setVar(pos, name, value);
         } else {
-            this.runner.error(pos, `NameError: Variable ${name} is not defined`);
+            this.runner.error(pos, 'NameError', `Variable ${name} is not defined`);
         }
     }
 
-    getState(pos: HasPos, state: number): FullStateSpecifier {
+    getState(pos: HasPos, state: number): FullCellSpecifier {
         let value = this.states.get(state);
         if (value !== undefined) {
             return value;
         } else if (this.parent) {
             return this.parent.getState(pos, state);
         } else {
-            this.runner.error(pos, `NameError: State ${state} is not defined`);
+            this.runner.error(pos, 'NameError', `State ${state} is not defined`);
         }
     }
 
-    setState(state: number, value: FullStateSpecifier): void {
+    setState(state: number, value: FullCellSpecifier): void {
         this.states.set(state, value);
     }
 
@@ -1285,28 +1387,30 @@ class Scope {
 
 class XLSScriptRunner {
 
-    code: string;
-    ulp: ULP;
-    noclause: Grid;
-    scope: Scope;
-    callStack: Position[];
+    readonly ulp: ULP;
 
-    constructor(code: string) {
+    code: string;
+    background: Grid;
+    scope: Scope;
+    callStack: {name: string, pos: Position}[];
+
+    constructor(code: string, ulp: ULP) {
         this.code = code;
-        this.ulp = new ULP(2);
-        this.noclause = new Grid();
+        this.ulp = ulp;
+        this.background = new Grid();
         this.scope = new Scope(this, undefined);
         this.callStack = [];
+        this.scope.declareVar('grid', {mut: false, value: {pos: BUILTIN_POS, type: 'grid', grid: ulp.grid}});
     }
 
-    error(pos: HasPos, msg: string): never {
+    error(pos: HasPos, type: string, msg: string): never {
         if ('pos' in pos) {
             pos = pos.pos;
         }
-        let text = `${msg}\n    at ${positionToString(pos)}`;
+        let text = `${type}: ${msg}\n    at ${positionToString(pos)}`;
         if (this.callStack) {
             for (let value of this.callStack) {
-                text += `\n    at ${positionToString(value)}`;
+                text += `\n    at ${value.name} at ${positionToString(value.pos)}`;
             }
         }
         throw new XLSScriptError(text);
@@ -1323,20 +1427,44 @@ class XLSScriptRunner {
         this.scope = this.scope.parent;
     }
 
+    _currentDefaultRuleFunc: ClauseFunc | undefined = undefined;
+
+    getCurrentDefaultRuleFunc(pos: HasPos): ClauseFunc {
+        if (this._currentDefaultRuleFunc === undefined) {
+            this.error(pos, 'ValueError', `No rule is currently set`);
+        } else {
+            return this._currentDefaultRuleFunc;
+        }
+    }
+
+    wrappedReassign(pos: HasPos, from: Cell, to: Cell, coord: Coord): void {
+        try {
+            this.ulp.reassign(from, to);
+        } catch (error) {
+            if (error instanceof XLSError && error.message === 'Contradiction detected') {
+                this.error(pos, 'ValueError', `Contradiction detected while trying to set cell at ${coord} from value ${from} to ${to}`);
+            }
+        }
+    }
+
     assertType<T extends ValueType>(value: Value, type: T, whatFor: string): ValueOfType<T> {
         if (value.type !== type) {
-            this.error(value, `TypeError: Expected value of type '${type}' for ${whatFor}, got type '${value.type}'`);
+            this.error(value, 'TypeError', `Invalid type for ${whatFor}: '${value.type}' (expected type '${type}')`);
         }
         return value as ValueOfType<T>;
     }
 
-    castToStateSpecifier(value: Value, whatFor: string): StateSpecifier {
+    castToCellSpecifier(value: Value, whatFor: string): CellSpecifier {
         if (value.type === 'number') {
-            return {pos: value.pos, type: 'state_specifier', kind: 'cell', cell: value.value};
-        } else if (value.type === 'state_specifier') {
+            if (!Number.isInteger(value) || value.value < 0 || value.value >= this.ulp.maxStates) {
+                this.error(value, 'ValueError', `Invalid number for conversion to cell specifier: '${value}'`);
+            }
+            let cell = new GridCell(value.value, this.getCurrentDefaultRuleFunc(value));
+            return {pos: value.pos, type: 'cell_specifier', kind: 'cell', cell};
+        } else if (value.type === 'cell_specifier') {
             return value;
         } else {
-            this.error(value, `TypeError: Expected value of type 'number' or 'state_specifier' for ${whatFor}, got type '${value.type}'`);
+            this.error(value, 'TypeError', `Invalid type for ${whatFor}: '${value.type}' (expected type 'number' or 'cell_specifier')`);
         }
     }
 
@@ -1349,55 +1477,106 @@ class XLSScriptRunner {
             out += grid.gens;
         }
         if (out < 0 || out >= grid.gens) {
-            this.error(pos, `ValueError: Generation out of bounds: '${out}' (expected -${grid.gens} to ${grid.gens - 1})`);
+            this.error(pos, 'ValueError', `Generation out of bounds: '${out}' (expected -${grid.gens} to ${grid.gens - 1})`);
         }
         return out;
     }
 
-    varValueNumberMapping: {[key: number]: number} = {};
-
-    setCells(data: GridLikeValue, gens: number[], x: number, y: number, value: StateSpecifier, baseT: number): void {
-        for (let t of gens) {
-            if (value.noclause !== undefined) {
-                data.noclause.set(t, x, y, value.noclause ? 1 : 0);
-            }
-        }
+    setCells(pos: HasPos, grid: GridLike, gens: number[], x: number, y: number, value: CellSpecifier, baseT: number): void {
         if (value.kind === 'periodic') {
             // special case for periodic
-            let cells: Cell[] = [];
+            let vars: Cell[] = [];
             for (let i = 0; i < value.period; i++) {
-                cells.push(this.ulp.getNewVar());
+                vars.push(this.ulp.getNewVar());
             }
             for (let t of gens) {
-                let cell = cells[(t + baseT) % cells.length];
-                this.ulp.reassign(data.grid.get(t, x, y), cell);
+                let cell = vars[(t + baseT) % vars.length];
+                let old = grid.get(t, x, y);
+                old.func = value.func;
+                if (old.value === -1) {
+                    old.value = cell;
+                } else {
+                    this.wrappedReassign(pos, old.value, cell, new Coord(t, x, y));
+                }
             }
             return;
         }
         for (let t of gens) {
             if (value.kind === 'nop') {
-                // do nothing
-            } else if (value.kind === 'cell' || value.kind === 'var' || value.kind === 'raw') {
-                let cell: Cell;
-                if (value.kind === 'var') {
-                    let number = value.number;
-                    if (number in this.varValueNumberMapping) {
-                        cell = this.varValueNumberMapping[number];
-                    } else {
-                        cell = this.ulp.getNewVar();
-                        this.varValueNumberMapping[number] = cell;
-                    }
-                } else if (value.kind === 'raw') {
-                    cell = value.value;
-                } else if (value.cell === -1) {
-                    cell = this.ulp.getNewVar();
-                } else {
-                    cell = value.cell;
+                if (value.func !== undefined) {
+                    grid.get(t, x, y).func = value.func;
                 }
-                this.ulp.reassign(data.grid.get(t, x, y), cell);
+            } else if (value.kind === 'cell') {
+                let old = grid.get(t, x, y);
+                old.func = value.cell.func;
+                if (old.value === -1) {
+                    old.value = value.cell.value;
+                } else {
+                    this.wrappedReassign(pos, old.value, value.cell.value, new Coord(t, x, y));
+                }
             } else {
-                throw new Error(`This error should not occur (invalid state specifier: ${value satisfies never})`);
+                throw new Error(`This error should not occur (invalid cell specifier: ${value satisfies never})`);
             }
+        }
+    }
+
+    valueToString(value: Value): string {
+        if (value.type === 'null') {
+            return `null`;
+        } else if (value.type === 'boolean') {
+            return value.value ? `true` : `false`;
+        } else if (value.type === 'number') {
+            return String(value);
+        } else if (value.type === 'string') {
+            return getStringValue(value);
+        } else if (value.type === 'range') {
+            let start = value.start === undefined ? '' : value.start;
+            let end = value.end === undefined ? '' : value.end;
+            return `${start}..${end}`;
+        } else if (value.type === 'vector') {
+            return `(${value.data.join(', ')})`;
+        } else if (value.type === 'vector_range') {
+            return '(' + value.data.map(item => {
+                let start = item[0] === undefined ? '' : item[0];
+                let end = item[1] === undefined ? '' : item[1];
+                return `${start}..${end}`;
+            }).join(', ') + ')';
+        } else if (value.type === 'cell_specifier') {
+            if (value.kind === 'nop') {
+                return `nop`;
+            } else if (value.kind === 'cell') {
+                let cell = value.cell.value;
+                if (cell === OFF) {
+                    return `off`;
+                } else if (cell === ON) {
+                    return `on`;
+                } else if (cell === UNKNOWN) {
+                    return `unknown`;
+                } else {
+                    return `var(${cell})`;
+                }
+            } else if (value.kind === 'periodic') {
+                return `period ${value.period}`;
+            } else {
+                throw new Error(`This error should not occur (invalid cell specifier: ${value satisfies never})`);
+            }
+        } else if (value.type === 'full_cell_specifier') {
+            return `<full cell specifier (go make speedy improve this if you want it better)>`;
+        } else if (value.type === 'grid') {
+            return `<grid (go make speedy improve this if you want it better)>`;
+        } else if (value.type === 'grid_slice') {
+            return `<grid slice (go make speedy improve this if you want it better)>`;
+        } else if (value.type === 'function') {
+            let boundText = (value.boundArgs && value.boundArgs.length > 0) ? 'bound ' : '';
+            if (value.builtin) {
+                return `<${boundText}builtin function ${value.name}>`;
+            } else {
+                return `<${boundText}function ${value.name}>`;
+            }
+        } else if (value.type === 'reference') {
+            return `<reference (go make speedy improve this if you want it better)>`;
+        } else {
+            throw new Error(`This error should not occur (invalid value: ${value satisfies never})`);
         }
     }
 
@@ -1406,34 +1585,20 @@ class XLSScriptRunner {
             return this.scope.getVar(value, value.name).value;
         } else if (value.kind === 'state') {
             return this.scope.getState(value, value.value);
-        } else if (value.kind === 'grid') {
-            let grid = value.data.grid;
-            if (!grid.isInBounds(value)) {
-                this.error(value, `ValueError: Coord is out of bounds: (${value.t}, ${value.x}, ${value.y})`);
+        } else if (value.kind === 'grid_coord') {
+            if (!value.grid.isInBounds(value.coord)) {
+                this.error(value, 'ValueError', `Coord is out of bounds: ${value.coord}`);
             } else {
-                return {pos: value.pos, type: 'state_specifier', kind: 'raw', value: grid.get(value)};
+                return {pos: value.pos, type: 'cell_specifier', kind: 'cell', cell: value.grid.get(value.coord)};
             }
-        } else if (value.kind === 'background') {
-            let grid = value.data.background;
-            if (!grid.isInBounds(value)) {
-                this.error(value, `ValueError: Coord is out of bounds: (${value.t}, ${value.x}, ${value.y})`);
-            } else {
-                return {pos: value.pos, type: 'state_specifier', kind: 'cell', cell: grid.get(value)};
-            }
-        } else if (value.kind === 'noclause') {
-            let grid = value.data.noclause;
-            if (!grid.isInBounds(value)) {
-                this.error(value, `ValueError: Coord is out of bounds: (${value.t}, ${value.x}, ${value.y})`);
-            } else {
-                return {pos: value.pos, type: 'boolean', value: Boolean(grid.get(value))};
-            }
-        } else if (value.kind === 'grid_key') {
+        } else if (value.kind === 'grid_magic_key') {
+            let pos = value.pos;
             if (value.key === 'width') {
-                return {pos: value.pos, type: 'number', value: value.data.grid.width};
+                return {pos, type: 'number', value: value.grid.width};
             } else if (value.key === 'height') {
-                return {pos: value.pos, type: 'number', value: value.data.grid.height};
+                return {pos, type: 'number', value: value.grid.height};
             } else if (value.key === 'gens') {
-                return {pos: value.pos, type: 'number', value: value.data.grid.gens};
+                return {pos, type: 'number', value: value.grid.gens};
             } else {
                 throw new Error(`This error should not occur (invalid grid key: ${value.key satisfies never})`);
             }
@@ -1477,38 +1642,45 @@ class XLSScriptRunner {
         if (left.kind === 'identifier') {
             left.scope.setVar(left, left.name, right);
         } else if (left.kind === 'state') {
-            left.scope.setState(left.value, this.assertType(right, 'full_state_specifier', `assigning to state`));
-        } else if (left.kind === 'grid') {
-            if (!left.data.grid.isInBounds(left)) {
-                this.error(left, `ValueError: Coord is out of bounds: (${left.t}, ${left.x}, ${left.y})`);
+            left.scope.setState(left.value, this.assertType(right, 'full_cell_specifier', `assigning to state`));
+        } else if (left.kind === 'grid_coord') {
+            let coord = left.coord;
+            if (!left.grid.isInBounds(coord)) {
+                this.error(left, 'ValueError', `Coord is out of bounds: ${coord}`);
             } else {
-                if (right.type === 'number') {
-
-                } else if (right.)
-                right = this.assertType(right, 'state_specifier', `assignment to grid`);
-                this.setCells(left.data, [left.t], left.x, left.y, right, 0);
+                right = this.castToCellSpecifier(right, `assignment to grid`);
+                this.setCells(pos, left.grid, [coord.t], coord.x, coord.y, right, 0);
             }
-        } else if (left.kind === 'background') {
-            if (!left.data.grid.isInBounds(left)) {
-                this.error(left, `ValueError: Coord is out of bounds: (${left.t}, ${left.x}, ${left.y})`);
-            } else {
-                right = this.castToStateSpecifier(right, `assignment to background`);
-                if (!(right.kind === 'cell' && right.cell !== -1)) {
-                    this.error(right, `ValueError: Cannot assign unknown cell to background`);
+        } else if (left.kind === 'grid_magic_key') {
+            if (left.key === 'width' || left.key === 'height' || left.key === 'gens') {
+                let grid = left.grid;
+                let value = this.assertType(right, 'number', `assignment to grid.${left.key}`).value;
+                if (!(grid instanceof Grid)) {
+                    this.error(pos, 'TypeError', `Cannot change dimensions of grid slice (the dimensions of a normal grid can be changed)`);
                 }
-                left.data.background.set(left, right.cell);
+                if (left.key === 'width') {
+                    let amount = value - grid.width;
+                    if (amount < 0) {
+                        grid.shrink({right: -amount});
+                    } else {
+                        grid.expand({right: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                    }
+                } else if (left.key === 'height') {
+                    let amount = value - grid.height;
+                    if (amount < 0) {
+                        grid.shrink({bottom: -amount});
+                    } else {
+                        grid.expand({bottom: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                    }
+                } else {
+                    let amount = value - grid.gens;
+                    if (amount < 0) {
+                        grid.shrink({end: -amount});
+                    } else {
+                        grid.expand({end: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                    }
+                }
             }
-        } else if (left.kind === 'noclause') {
-            if (!left.data.grid.isInBounds(left)) {
-                this.error(left, `ValueError: Coord is out of bounds: (${left.t}, ${left.x}, ${left.y})`);
-            } else {
-                right = this.assertType(right, 'boolean', `assignment to noclause`);
-                left.data.noclause.set(left, right.value ? 1 : 0);
-            }
-        } else if (left.kind === 'grid_key') {
-            // todo: make this work
-            // it should expand the grid
-            1 satisfies string;
         } else {
             throw new Error(`This error should not occur (invalid lvalue: ${left satisfies never})`);
         }
@@ -1523,19 +1695,160 @@ class XLSScriptRunner {
     }
 
     vectorLiteralExpression(node: VectorLiteralExpression): ExpressionValue {
-        let data: number[] = [];
-        for (let value of node.data) {
-            data.push(this.assertType(this.expression(value), 'number', `vector literal element`).value);
+        // todo: make this work with ranges
+        let data = node.data.map(value => this.expression(value));
+        if (data.every(value => value.type === 'number')) {
+            return {pos: node.pos, type: 'vector', data: data.map(x => x.value)};
+        } else {
+            let out: [number | undefined, number | undefined][] = [];
+            for (let value of data) {
+                if (value.type === 'number') {
+                    out.push([value.value, value.value]);
+                } else if (value.type === 'range') {
+                    out.push([value.start, value.end]);
+                } else {
+                    this.error(value, 'TypeError', `Invalid type for vector literal element: '${value.type}' (expected 'number' or 'range')`);
+                }
+            }
+            return {pos: node.pos, type: 'vector_range', data: out};
         }
-        return {pos: node.pos, type: 'vector', data};
+    }
+
+    assertArgType<T extends ValueType>(value: Value | undefined, type: T, paramName: string): ValueOfType<T> {
+        let {name, pos} = this.callStack[this.callStack.length - 1];
+        if (value === undefined) {
+            this.error(pos, 'TypeError', `No argument passed for parameter ${paramName} of builtin function ${name}`);
+        }
+        if (value.type !== type) {
+            this.error(value, 'TypeError', `Invalid type for parameter ${paramName} of builtin function ${name}: '${value.type}' (expected type '${type}')`);
+        }
+        return value as ValueOfType<T>;
     }
 
     functionCallExpression(node: FunctionCallExpression): ExpressionValue {
-
+        let func = this.assertType(this.expression(node.func), 'function', `for calling`);
+        let args = [];
+        if (func.boundArgs !== undefined) {
+            for (let arg of func.boundArgs) {
+                args.push(arg);
+            }
+        }
+        for (let arg of node.args) {
+            args.push(this.expression(arg));
+        }
+        if (func.builtin) {
+            this.callStack.push({name: func.name, pos: node.pos});
+            let out = func.func.call(this, node.pos, ...args);
+            this.callStack.pop();
+            return out;
+        } else {
+            throw new Error(`Cannot call non-builtin functions yet`);
+        }
     }
 
     memberExpression(node: MemberExpression): ExpressionValue {
-        
+        let pos = node.pos;
+        let value = this.expression(node.value);
+        let member: string | NumberValue | Vector | Range | VectorRange;
+        if (node.member.type === 'identifier') {
+            member = node.member.name;
+        } else {
+            let value = this.expression(node.member);
+            if (value.type === 'string') {
+                member = getStringValue(value);
+            } else if (value.type === 'number' || value.type === 'vector' || value.type === 'range' || value.type === 'vector_range') {
+                member = value;
+            } else {
+                this.error(node, 'TypeError', `Invalid type for member: '${value.type}' (expected 'string', 'number', 'vector', 'range', or 'vector_range)`);
+            }
+        }
+        let memberStr = typeof member === 'string' ? member : this.valueToString(member);
+        if (value.type === 'null') {
+            this.error(node, 'TypeError', `Null does not have members`);
+        } else if (value.type === 'vector') {
+            let out: number | undefined;
+            if (typeof member === 'string') {
+                if (member === 'length') {
+                    out = value.data.length;
+                }
+                if (value.data.length === 2) {
+                    if (member === 'x') {
+                        out = value.data[0];
+                    } else if (member === 'y') {
+                        out = value.data[1];
+                    }
+                } else if (value.data.length === 3) {
+                    if (member === 't') {
+                        out = value.data[0];
+                    } else if (member === 'x') {
+                        out = value.data[1];
+                    } else if (member === 'y') {
+                        out = value.data[2];
+                    }
+                }
+            } else if (member.type === 'number') {
+                out = value.data[member.value];
+                if (out === undefined) {
+                    this.error(node, 'MemberError', `Invalid vector index: '${memberStr}'`);
+                }
+            }
+            if (out !== undefined) {
+                return {pos, type: 'number', value: out};
+            } else {
+                if (member === 't') {
+                    this.error(node, 'MemberError', `Member '${memberStr}' does not exist in vector of length ${value.data.length} (only exists in vectors of length 3)`);
+                } else if (member === 'x' || member === 'y') {
+                    this.error(node, 'MemberError', `Member '${memberStr}' does not exist in vector of length ${value.data.length} (only exists in vectors of length 2 or 3)`);
+                }
+            }
+        } else if (value.type === 'grid' || value.type === 'grid_slice') {
+            let grid = value.grid;
+            if (typeof member === 'string') {
+                if (GRID_MAGIC_KEYS.has(member as GridMagicKey)) {
+                    return {pos, type: 'lvalue', kind: 'grid_magic_key', grid, key: member as GridMagicKey};
+                }
+            } else if (member.type === 'vector') {
+                if (member.data.length !== 3) {
+                    this.error(node, 'MemberError', `Cannot index grid-like value with vector of length  ${member.data.length} (must be length 3)`);
+                }
+                let t = member.data[0];
+                let x = member.data[1];
+                let y = member.data[2];
+                let coord = new Coord(t, x, y);
+                return {pos, type: 'lvalue', kind: 'grid_coord', grid, coord};
+            } else if (member.type === 'vector_range') {
+                if (member.data.length !== 3) {
+                    this.error(node, 'MemberError', `Cannot index grid-like value with vector of length  ${member.data.length} (must be length 3)`);
+                }
+                let start = new Coord(
+                    member.data[0][0] ?? 0,
+                    member.data[1][0] ?? 0,
+                    member.data[2][0] ?? 0,
+                );
+                let end = new Coord(
+                    member.data[0][0] ?? grid.gens,
+                    member.data[1][0] ?? grid.width,
+                    member.data[2][0] ?? grid.height,
+                );
+                let slice = new GridSlice(grid, start, end);
+                return {pos, type: 'grid_slice', grid: slice};
+            }
+        }
+        if (typeof member !== 'string') {
+            this.error(node, 'MemberError', `Value of type '${value.type}' does not have members of type '${member.type}'`);
+        }
+        let out = BUILTIN_METHODS[value.type].get(member);
+        if (out !== undefined) {
+            if (out.type === 'function') {
+                out = copyValue(out);
+                if (!out.boundArgs) {
+                    out.boundArgs = [];
+                }
+                out.boundArgs.push(value);
+            }
+            return out;
+        }
+        this.error(node, 'MemberError', `Member '${memberStr}' does not exist in value of type '${value.type}'`);
     }
 
     unaryExpression(node: UnaryExpression): ExpressionValue {
@@ -1555,26 +1868,79 @@ class XLSScriptRunner {
             return {pos: node.pos, type: 'boolean', value};
         } else if (op === '&') {
             if (!isLvalue(arg)) {
-                this.error(arg, `SyntaxError: Expected lvalue for unary & operator`);
+                this.error(arg, 'SyntaxError', `Expected lvalue for unary & operator`);
             }
             return {pos: node.pos, type: 'reference', value: arg};
         } else if (op === '*') {
             let out = this.assertType(this.decayLvalues(arg), 'reference', `unary * operator`).value;
-            out = structuredClone(out);
+            out = copyLvalue(out);
             out.pos = node.pos;
             return out;
         } else if (op === 'state') {
             let value = this.assertType(this.decayLvalues(arg), 'number', `state operator`).value;
             return {pos: node.pos, type: 'lvalue', kind: 'state', scope: this.scope, value};
-        } else if (op === 'noclause' || op === 'yesclause') {
-            let value = structuredClone(this.assertType(this.decayLvalues(arg), 'state_specifier', `${op} operator`));
-            value.noclause = op === 'noclause';
+        } else if (op === 'noclause') {
+            let value = copyValue(this.assertType(this.decayLvalues(arg), 'cell_specifier', `${op} operator`));
+            if (value.kind === 'cell') {
+                value.cell.func = undefined;
+            } else {
+                value.func = undefined;
+            }
             return value;
         } else if (op === 'period') {
             let period = this.assertType(this.decayLvalues(arg), 'number', `period operator`).value;
-            return {pos: node.pos, type: 'state_specifier', kind: 'periodic', period};
+            let func = this.getCurrentDefaultRuleFunc(node);
+            return {pos: node.pos, type: 'cell_specifier', kind: 'periodic', period, func};
+        } else if (op === 'typeof') {
+            return {pos: node.pos, type: 'string', chars: toStringChars(this.decayLvalues(arg).type)};
         } else {
             throw new Error(`This error should not occur (invalid unary operator: ${op satisfies never})`);
+        }
+    }
+
+    rangeExpression(node: RangeExpression): ExpressionValue {
+        let pos = node.pos;
+        let start = node.start === undefined ? undefined : this.expression(node.start);
+        let end = node.end === undefined ? undefined : this.expression(node.end);
+        if (start === undefined) {
+            if (end === undefined) {
+                return {pos, type: 'range', start: undefined, end: undefined};
+            } else if (end.type === 'number') {
+                return {pos, type: 'range', start: undefined, end: end.value};
+            } else if (end.type === 'vector') {
+                return {pos, type: 'vector_range', data: end.data.map(value => [undefined, value])};
+            } else {
+                this.error(end, 'TypeError', `Cannot make range out of value of type '${end.type}'`);
+            }
+        } else if (end === undefined) {
+            if (start.type === 'number') {
+                return {pos, type: 'range', start: start.value, end: undefined};
+            } else if (start.type === 'vector') {
+                return {pos, type: 'vector_range', data: start.data.map(value => [value, undefined])};
+            } else {
+                this.error(start, 'TypeError', `Cannot make range out of value of type '${start.type}'`);
+            }
+        } else {
+            if (!(start.type === 'number' || start.type === 'vector')) {
+                this.error(start, 'TypeError', `Cannot make range out of value of type '${start.type}'`);
+            }
+            if (!(end.type === 'number' || end.type === 'vector')) {
+                this.error(end, 'TypeError', `Cannot make range out of value of type '${end.type}'`);
+            }
+            if (start.type === 'number' && end.type === 'number') {
+                return {pos, type: 'range', start: start.value, end: end.value};
+            } else if (start.type === 'vector' && end.type === 'vector') {
+                if (start.data.length !== end.data.length) {
+                    this.error(node, 'ValueError', `Cannot make range out of vectors with two different lengths ${start.data.length} and ${end.data.length}`);
+                }
+                let data: [number, number][] = [];
+                for (let i = 0; i < start.data.length; i++) {
+                    data.push([start.data[i], end.data[i]]);
+                }
+                return {pos, type: 'vector_range', data};
+            } else {
+                this.error(node, 'TypeError', `Cannot make range out of values of two different types '${start.type}' and '${end.type}'`);
+            }
         }
     }
 
@@ -1584,7 +1950,7 @@ class XLSScriptRunner {
         // first the assignment operator
         if (op === '=') {
             if (!isLvalue(left)) {
-                this.error(left, `SyntaxError: Left-hand operand of assignment operator is not an lvalue`);
+                this.error(left, 'SyntaxError', `Left-hand operand of assignment operator is not an lvalue`);
             }
             let right = this.expression(node.right);
             this.setLvalue(node, left, right);
@@ -1617,25 +1983,7 @@ class XLSScriptRunner {
         }
         // then the operators that don't work on only numbers
         let right = this.expression(node.right);
-        if (op === '..<' || op === '..=') {
-            let isInclusive = op === '..<';
-            if (!(left.type === 'number' || left.type === 'vector')) {
-                this.error(left, `TypeError: Cannot make range out of value of type '${left.type}'`);
-            }
-            if (!(right.type === 'number' || right.type === 'vector')) {
-                this.error(right, `TypeError: Cannot make range out of value of type '${right.type}'`);
-            }
-            if (left.type !== right.type) {
-                this.error(node, `TypeError: Cannot make range out of values of two different types '${left.type}' and '${right.type}'`);
-            }
-            if (left.type === 'number' && right.type === 'number') {
-                return {pos: node.pos, type: 'range', kind: 'number', isInclusive, start: left.value, end: right.value};
-            } else if (left.type === 'vector' && right.type === 'vector') {
-                return {pos: node.pos, type: 'range', kind: 'vector', isInclusive, start: left, end: right};
-            } else {
-                throw new Error(`This error should not occur (invalid rangeable)`);
-            }
-        } else if (op === '==') {
+        if (op === '==') {
             return {pos: node.pos, type: 'boolean', value: valuesAreEqual(left, right)};
         } else if (op === '!=') {
             return {pos: node.pos, type: 'boolean', value: !valuesAreEqual(left, right)};
@@ -1680,30 +2028,17 @@ class XLSScriptRunner {
         return {pos: node.pos, type: 'number', value: out};
     }
 
-    fullStateSpecifierExpression(node: FullStateSpecifierExpression): Value {
-        let parts: FullStateSpecifierPart[] = [];
+    fullCellSpecifierExpression(node: FullCellSpecifierExpression): Value {
+        let parts: FullCellSpecifierPart[] = [];
         for (let part of node.parts) {
-            let gens: number[] = [];
-            if (part.gens.type === 'keyword') {
-                for (let i = 0; i < this.ulp.grid.gens; i++) {
-                    gens.push(i);
-                }
-            } else {
-                let value = this.expression(part.gens);
-                if (value.type === 'number') {
-
-                } else if (value.type === 'range') {
-                    if (value.kind !== 'number') {
-                        this.error(value, `TypeError: Cannot use range of vectors for state specifier generation`);
-                    }
-                } else {
-                    this.error(value, `TypeError: Expected value of type 'number' or 'range' for state specifier generation, got type '${value.type}'`);
-                }
+            let gens = this.expression(part.gens);
+            if (!(gens.type === 'number' || gens.type === 'range')) {
+                this.error(gens, 'TypeError', `Invalid type for cell specifier generation: '${gens.type}' (expected 'number' or 'range')`);
             }
-            let specifier = this.assertType(this.expression(part.value), 'state_specifier', `full state specifier part`);
+            let specifier = this.castToCellSpecifier(this.expression(part.value), `full cell specifier part`);
             parts.push({isRelative: part.isRelative, gens, value: specifier});
         }
-        return {pos: node.pos, type: 'full_state_specifier', parts};
+        return {pos: node.pos, type: 'full_cell_specifier', parts};
     }
 
     _expression(node: Expression): ExpressionValue {
@@ -1711,6 +2046,9 @@ class XLSScriptRunner {
             return {pos: node.pos, type: 'lvalue', kind: 'identifier', scope: this.scope, name: node.name};
         } else if (node.type === 'simple-literal-expression') {
             return node.value;
+        } else if (node.type === 'cell-literal-expression') {
+            let cell = new GridCell(node.value, this.getCurrentDefaultRuleFunc(node));
+            return {pos: node.pos, type: 'cell_specifier', kind: 'cell', cell};
         } else if (node.type === 'vector-literal-expression') {
             return this.vectorLiteralExpression(node);
         } else if (node.type === 'function-call-expression') {
@@ -1719,10 +2057,12 @@ class XLSScriptRunner {
             return this.memberExpression(node);
         } else if (node.type === 'unary-expression') {
             return this.unaryExpression(node);
+        } else if (node.type === 'range-expression') {
+            return this.rangeExpression(node);
         } else if (node.type === 'binary-expression') {
             return this.binaryExpression(node);
         } else if (node.type === 'full-state-specifier-expression') {
-            return this.fullStateSpecifierExpression(node);
+            return this.fullCellSpecifierExpression(node);
         } else if (node.type === 'conditional-expression') {
             if (valueIsTruthy(this.expression(node.condition))) {
                 return this._expression(node.ifTrue);
@@ -1747,6 +2087,34 @@ class XLSScriptRunner {
     }
 
     rleStatement(node: RLEStatement): void {
+        // get the grid to set
+        let gridValue = this.expression(node.grid);
+        if (!(gridValue.type === 'grid' || gridValue.type === 'grid_slice')) {
+            this.error(gridValue, 'TypeError', `Invalid type for RLE statement grid: '${gridValue.type}' (expected type 'grid' or 'grid_slice')`);
+        }
+        let grid = gridValue.grid;
+        // get the generations to set in the grid
+        let baseGens: number[];
+        if (node.gens) {
+            let value = this.expression(node.gens);
+            if (value.type === 'number') {
+                baseGens = [this.resolveGeneration(value, value.value)];
+            } else if (value.type === 'range') {
+                let start = value.start ?? 0;
+                let end = value.end ?? grid.gens;
+                baseGens = [];
+                for (let i = start; i < end; i++) {
+                    baseGens.push(this.resolveGeneration(value, i));
+                }
+            } else {
+                this.error(value, 'TypeError', `Invalid type for gens value of RLE statement: '${value.type}' (expected type 'number' or 'range')`);
+            }
+        } else {
+            baseGens = [];
+            for (let i = 0; i < grid.gens; i++) {
+                baseGens.push(i);
+            }
+        }
         // get the pattern corresponding to the RLE
         let rle = node.rle.value;
         let p: IdentityPattern;
@@ -1754,7 +2122,7 @@ class XLSScriptRunner {
             p = IdentityPattern.loadRLE(rle);
         } catch (error) {
             if (error instanceof LifewebError) {
-                this.error(node.rle, `LifewebError: ${error.message}`);
+                this.error(node.rle, 'LifewebError', error.message);
             } else {
                 throw error;
             }
@@ -1769,43 +2137,39 @@ class XLSScriptRunner {
         let height = Math.max(Number(match[2]), p.height);
         p.expand(0, height - p.height, 0, width - p.width);
         // expand the grid to fit the pattern
-        let gridValue = this.expression(node.grid);
-        let grid = this.assertType(this.expression(node.grid), 'grid');
-        let xOffset = 0;
-        let yOffset = 0;
-        let grid = this.ulp.grid;
-        if (xOffset < 0) {
-            grid.expand({left: -xOffset}, this.ulp.getNewVar.bind(this.ulp));
-            xOffset = 0;
-        }
-        if (yOffset < 0) {
-            grid.expand({top: -xOffset}, this.ulp.getNewVar.bind(this.ulp));
-            yOffset = 0;
-        }
-        let maxX = width + xOffset;
-        let maxY = height + yOffset;
-        if (maxX > grid.width) {
-            grid.expand({right: maxX - grid.width}, this.ulp.getNewVar.bind(this.ulp));
-        }
-        if (maxY > grid.height) {
-            grid.expand({bottom: maxY - grid.height}, this.ulp.getNewVar.bind(this.ulp));
-        }
-        // copy the states into the pattern
-        let baseGens: number[];
-        if (node.gens === undefined) {
-            baseGens = [0];
-        } else {
-            baseGens = this.resolveGenerations(node.gens, this.expression(node.gens), 0);
+        if (width > grid.width || height > grid.height) {
+            if (grid instanceof GridSlice) {
+                this.error(gridValue, 'TypeError', `RLE too big for grid slice (grid slices are not expandable, normal grids are)`);
+            }
+            let cell = new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(node.rle));
+            if (width > grid.width) {
+                grid.expand({right: width - grid.width}, cell);
+            }
+            if (height > grid.height) {
+                grid.expand({bottom: width - grid.height}, cell);
+            }
         }
         for (let y = 0; y < p.height; y++) {
             for (let x = 0; x < p.width; x++) {
                 let state = p.get(x, y);
-                let x2 = x + xOffset;
-                let y2 = y + yOffset;
                 for (let part of this.scope.getState(node.rle, state).parts) {
                     for (let baseGen of baseGens) {
-                        let gens = this.resolveGenerations(node.gens ?? node, part.gens, baseGen);
-                        this.setCells(gens, x2, y2, part.value, baseGen);
+                        let gens: number[];
+                        if (part.gens.type === 'number') {
+                            gens = [baseGen];
+                        } else {
+                            let start = part.gens.start ?? 0;
+                            let end = part.gens.end ?? grid.gens;
+                            gens = [];
+                            for (let i = start; i < end; i++) {
+                                gens.push(i);
+                            }
+                        }
+                        if (part.isRelative) {
+                            gens = gens.map(gen => gen + baseGen); 
+                        }
+                        gens = gens.map(gen => this.resolveGeneration(node.rle, gen));
+                        this.setCells(node.rle, grid, gens, x, y, part.value, baseGen);
                     }
                 }
             }
@@ -1834,33 +2198,39 @@ class XLSScriptRunner {
     }
 
     forStatement(node: ForStatement): void {
-        let value = this.assertType(this.expression(node.iterateOver), 'range', `for statement`);
-        this.pushScope();
-        this.scope.declareVar(node.name.name, {mut: true, value: {pos: node.pos, type: 'null'}});
-        if (value.kind === 'number') {
-            for (let i = value.start; i < value.end + (value.isInclusive ? 1 : 0); i++) {
-                this.scope.setVar(node.name, node.name.name, {pos: node.name.pos, type: 'number', value: i});
+        let mut = node.mut;
+        let name = node.name;
+        let value = this.expression(node.iterateOver);
+        if (value.type === 'range') {
+            if (value.start === undefined || value.end === undefined) {
+                this.error(value, 'ValueError', `Cannot iterate over incomplete range '${this.valueToString(value)}'`);
+            }
+            for (let i = value.start; i < value.end; i++) {
+                this.pushScope();
+                let value: NumberValue = {pos: name.pos, type: 'number', value: i};
+                this.scope.declareVar(name.name, {mut, value});
                 this.blockStatement(node.value);
+                this.popScope();
             }
-        } else if (value.kind === 'vector') {
-            let start = value.start.data;
-            let end = value.end.data;
-            if (value.isInclusive) {
-                end = end.map(x => x + 1);
+        } else if (value.type === 'vector_range') {
+            let data = value.data as [number, number][];
+            if (data.some(item => item[0] === undefined || item[1] === undefined)) {
+                this.error(value, 'ValueError', `Cannot iterate over partial range`);
             }
-            let data: number[] = [];
-            for (let i = 0; i < start.length; i++) {
-                data.push(start[i]);
+            let current: number[] = [];
+            for (let i = 0; i < value.data.length; i++) {
+                current.push(data[i][0]);
             }
             while (true) {
                 let done = false;
-                for (let i = start.length - 1; i >= 0; i--) {
-                    data[i]++;
-                    if (data[i] >= end[i]) {
+                for (let i = data.length - 1; i >= 0; i--) {
+                    current[i]++;
+                    if (current[i] >= data[i][1]) {
                         if (i === 0) {
                             done = true;
                             break;
                         } else {
+                            current[i] = data[i][0];
                             continue;
                         }
                     } else {
@@ -1870,12 +2240,22 @@ class XLSScriptRunner {
                 if (done) {
                     break;
                 }
-                let value: Vector = {pos: node.name.pos, type: 'vector', data: structuredClone(data)};
-                this.scope.setVar(node.name, node.name.name, value);
+                this.pushScope();
+                let value: Vector = {pos: node.name.pos, type: 'vector', data: structuredClone(current)};
+                this.scope.declareVar(name.name, {mut, value});
                 this.blockStatement(node.value);
+                this.popScope();
+            }
+        } else if (value.type === 'grid' || value.type === 'grid_slice') {
+            for (let coord of value.grid.coords()) {
+                this.pushScope();
+                let value: Vector = {pos: node.name.pos, type: 'vector', data: [coord.t, coord.x, coord.y]};
+                this.scope.declareVar(name.name, {mut, value});
+                this.blockStatement(node.value);
+                this.popScope();
             }
         } else {
-            throw new Error(`This error should not occur (invalid rangeable: ${value satisfies never})`);
+            this.error(value, 'TypeError', `Invalid type for for statement: '${value.type}' (expected 'range', 'vector_range', 'grid', or 'grid_slice')`);
         }
         this.popScope();
     }
@@ -1906,42 +2286,139 @@ class XLSScriptRunner {
         }
     }
 
-    getRuleFunc(): ClauseFunc {
-    }
-
-    async program(data: Statement[]): Promise<ULP> {
+    async program(data: Statement[]): Promise<void> {
         for (let node of data) {
             this.statement(node);
         }
-        let func = this.getRuleFunc();
         let grid = this.ulp.grid;
-        let bg = this.ulp.background;
-        let noclause = this.noclause;
-        grid.expand({top: 1, bottom: 1, left: 1, right: 1}, 0);
+        let bg = this.background.copy();
+        // make them all noclause
+        for (let cell of bg.cells()) {
+            cell.func = undefined;
+        }
+        // expand the grid to add in the background
+        let empty = new GridCell(OFF, undefined);
+        grid.expand({top: 1, bottom: 1, left: 1, right: 1}, empty.copy());
         for (let t = 0; t < grid.gens; t++) {
-            grid.set(t, 0, 0, bg.get(0, grid.width - 1, grid.height - 1));
-            grid.set(t, grid.width - 1, grid.height - 1, bg.get(0, 0, 0));
+            grid.set(t, 0, 0, bg.getAllowOOB(0, grid.width - 1, grid.height - 1) ?? empty.copy());
+            grid.set(t, grid.width - 1, grid.height - 1, bg.getAllowOOB(0, 0, 0) ?? empty.copy());
             for (let x = 1; x < grid.width - 1; x++) {
-                grid.set(t, x, 0, bg.get(0, x, grid.width - 1));
-                grid.set(t, x, grid.width - 1, bg.get(0, 0, x));
+                grid.set(t, x, 0, bg.getAllowOOB(t, x, grid.height - 1) ?? empty.copy());
+                grid.set(t, x, grid.height - 1, bg.getAllowOOB(t, x, 0) ?? empty.copy());
+            }
+            for (let y = 1; y < grid.height - 1; y++) {
+                grid.set(t, 0, y, bg.getAllowOOB(t, grid.width - 1, y) ?? empty.copy());
+                grid.set(t, grid.width - 1, y, bg.getAllowOOB(t, 0, y) ?? empty.copy());
             }
         }
-        noclause.expand({top: 1, bottom: 1, left: 1, right: 1}, 1);
-        this.ulp.addClauses(func, noclause);
-        return this.ulp;
+        this.ulp.addRuleClauses();
     }
 
 }
 
 
-export async function runScript(code: string, filePath: string = '') {
-    let parser = new XLSScriptParser(filePath, code);
-    let data = await parser.program();
-    let runner = new XLSScriptRunner(code);
-    return await runner.program(data);
+const BUILTIN_GLOBALS = new Map<string, Value>();
+
+const BUILTIN_METHODS: {[K in Exclude<ValueType, 'null'>]: Map<string, Value>} = {
+    'boolean': new Map(),
+    'number': new Map(),
+    'string': new Map(),
+    'range': new Map(),
+    'vector': new Map(),
+    'vector_range': new Map(),
+    'cell_specifier': new Map(),
+    'full_cell_specifier': new Map(),
+    'grid': new Map(),
+    'grid_slice': new Map(),
+    'function': new Map(),
+    'reference': new Map(),
+};
+
+function addBuiltinFunction(to: 'global' | Exclude<ValueType, 'null'> | Exclude<ValueType, 'null'>[], name: string, params: string[], func: BuiltinFunctionFunc): void {
+    let value: FunctionValue = {pos: BUILTIN_POS, type: 'function', name, builtin: true, params, func};
+    if (to === 'global') {
+        BUILTIN_GLOBALS.set(name, value);
+    } else if (Array.isArray(to)) {
+        for (let type of to) {
+            let value2 = copyValue(value);
+            value2.name = `${type}.${value2.name}`;
+            BUILTIN_METHODS[type].set(name, value);
+        }
+    } else {
+        value.name = `${to}.${name}`;
+        BUILTIN_METHODS[to].set(name, value);
+    }
 }
 
-export async function runFile(filePath: string): Promise<ULP> {
+
+// global functions
+
+addBuiltinFunction('global', 'set_rule', ['rule'], function(pos: Position, _rule?: Value): Value {
+    let rule = this.assertArgType(_rule, 'string', 'rule');
+    let p = createPattern(getStringValue(rule));
+    let trs: Uint8Array;
+    if (p instanceof MAPPattern) {
+        trs = p.trs;
+    } else if (p instanceof MAPB0Pattern) {
+        trs = p.evenTrs.map(x => x === 0 ? 1 : 0);
+    } else {
+        this.error(rule, 'ValueError', `Rules that are not 2-state range-1 Moore-neighborhood are not supported`);
+    }
+    let func = this.ulp.addLookupTableClauseFunc(10);
+    for (let i = 0; i < 1024; i++) {
+        func.table[i] = (trs[i >> 1] === (i & 1)) ? 0 : 1;
+    }
+    this._currentDefaultRuleFunc = func;
+    return {pos, type: 'null'};
+});
+
+
+// grid methods
+
+addBuiltinFunction('grid', 'apply_wrap', ['dx', 'dy'], function(pos: Position, _grid?: Value, _dx?: Value, _dy?: Value): Value {
+    let grid = this.assertArgType(_grid, 'grid', 'grid').grid;
+    let dx = this.assertArgType(_dx, 'number', 'dx').value;
+    let dy = this.assertArgType(_dy, 'number', 'dy').value;
+    let ruleFunc = this.getCurrentDefaultRuleFunc(pos);
+    grid.expand({end: 1}, new GridCell(UNKNOWN, ruleFunc));
+    for (let endY = 0; endY < grid.height; endY++) {
+        for (let endX = 0; endX < grid.width; endX++) {
+            let startX = endX - dx;
+            let startY = endY - dy;
+            if (!grid.isInBounds(0, startX, startY)) {
+                // this cell doesn't exist at the start so it must be 0
+                grid.set(grid.gens - 1, endX, endY, new GridCell(OFF, ruleFunc));
+            } else {
+                // bind the start and end together
+                this.ulp.reassign(grid.get(0, startX, startY).value, grid.get(grid.gens - 1, endX, endY).value);
+            }
+        }
+    }
+    for (let startY = 0; startY < grid.height; startY++) {
+        for (let startX = 0; startX < grid.width; startX++) {
+            let endX = startX + dx;
+            let endY = startY + dy;
+            if (endX < 0 || endX >= grid.width || endY < 0 || endY >= grid.height) {
+                // this cell doesn't exist at the end so it must be 0
+                grid.set(0, startX, startY, new GridCell(OFF, ruleFunc));
+            }
+        }
+    }
+    return {pos, type: 'null'};
+});
+
+
+export async function runScript(code: string, filePath: string = '<anonymous>'): Promise<ULP> {
+    let ulp = new ULP(2);
+    let parser = new XLSScriptParser(filePath, code, ulp);
+    let data = await parser.program();
+    let runner = new XLSScriptRunner(code, ulp);
+    await runner.program(data);
+    ulp.normalize();
+    return ulp;
+}
+
+export async function runScriptFromFile(filePath: string): Promise<ULP> {
     let fs = await import('node:fs/promises');
     let code = (await fs.readFile(filePath)).toString();
     return await runScript(code, filePath);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../base/search.c"
+#include "../base/search.cpp"
 
 typedef struct CNF_clauses {
     size_t var_count;

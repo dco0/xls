@@ -12,6 +12,7 @@ export type Cell = number;
 
 export const OFF = 0;
 export const ON = 1;
+export const UNKNOWN = -1;
 
 
 export class LookupTableClauseFunc {
@@ -19,18 +20,22 @@ export class LookupTableClauseFunc {
     readonly ulp: ULP;
 
     varCount: number;
-    data: number[];
+    table: number[];
 
     constructor(ulp: ULP, varCount: number) {
         this.ulp = ulp;
         this.varCount = varCount;
-        this.data = new Array(ulp.maxStates ** varCount);
-        this.data.fill(0);
+        this.table = new Array(ulp.maxStates ** varCount);
+        this.table.fill(0);
+    }
+
+    toString(): string {
+        return `${this.varCount} lookup_table ${this.table.join(' ')}`;
     }
     
     copy(ulp?: ULP): LookupTableClauseFunc {
         let out = new LookupTableClauseFunc(ulp ?? this.ulp, this.varCount);
-        out.data = structuredClone(this.data);
+        out.table = structuredClone(this.table);
         return out;
     }
 
@@ -51,6 +56,10 @@ export class Clause {
         this.ulp = ulp;
         this.func = func;
         this.data = data;
+    }
+
+    toString(): string {
+        return `${this.ulp.funcs.indexOf(this.func)} ${this.data.join(' ')}`;
     }
 
     copy(ulp?: ULP, func?: LookupTableClauseFunc): Clause {
@@ -79,6 +88,10 @@ export class Coord implements CoordLike {
         this.y = y;
     }
 
+    toString(): string {
+        return `(${this.t}, ${this.x}, ${this.y})`;
+    }
+
     copy(): Coord {
         return new Coord(this.t, this.x, this.y);
     }
@@ -97,8 +110,25 @@ export class Coord implements CoordLike {
 
 }
 
-export function coord(t: number, x: number, y: number): Coord {
-    return new Coord(t, x, y);
+
+export class GridCell {
+
+    value: Cell;
+    func: ClauseFunc | undefined;
+
+    constructor(value: Cell, func: ClauseFunc | undefined) {
+        this.value = value;
+        this.func = func;
+    }
+
+    copy(): GridCell {
+        return new GridCell(this.value, this.func);
+    }
+
+    eq(other: GridCell): boolean {
+        return this.value === other.value && this.func === other.func;
+    }
+
 }
 
 
@@ -108,7 +138,7 @@ export interface GridLike {
     height: number;
     gens: number;
 
-    data: Cell[][][];
+    data: GridCell[][][];
 
     eq(other: GridLike): boolean;
 
@@ -118,18 +148,18 @@ export interface GridLike {
     isInBounds(x: number, y: number): boolean;
     isInBounds(coord: CoordLike): boolean;
 
-    get(t: number, x: number, y: number): Cell;
-    get(coord: CoordLike): Cell;
+    get(t: number, x: number, y: number): GridCell;
+    get(coord: CoordLike): GridCell;
 
-    getAllowOOB(t: number, x: number, y: number): Cell | undefined;
-    getAllowOOB(coord: CoordLike): Cell | undefined;
+    getAllowOOB(t: number, x: number, y: number): GridCell | undefined;
+    getAllowOOB(coord: CoordLike): GridCell | undefined;
 
-    set(t: number, x: number, y: number, value: Cell): void;
-    set(pos: CoordLike, value: Cell): void;
+    set(t: number, x: number, y: number, value: GridCell): void;
+    set(pos: CoordLike, value: GridCell): void;
 
-    entries(): IterableIterator<[Coord, Cell]>;
+    entries(): IterableIterator<[Coord, GridCell]>;
     coords(): IterableIterator<Coord>;
-    cells(): IterableIterator<Cell>;
+    cells(): IterableIterator<GridCell>;
 
     flipHorizontal(): void;
     flipVertical(): void;
@@ -148,7 +178,7 @@ export class Grid implements GridLike {
     height: number = 0;
     gens: number = 0;
 
-    data: Cell[][][] = [];
+    data: GridCell[][][] = [];
     
     eq(other: GridLike): boolean {
         return this === other;
@@ -159,7 +189,7 @@ export class Grid implements GridLike {
         out.width = this.width;
         out.height = this.height;
         out.gens = this.gens;
-        out.data = structuredClone(this.data);
+        out.data = this.data.map(layer => layer.map(row => row.map(cell => cell.copy())));
         return out;
     }
 
@@ -186,9 +216,9 @@ export class Grid implements GridLike {
         return t >= 0 && t < this.gens && x >= 0 && x < this.width && y >= 0 && y < this.height;
     }
 
-    get(t: number, x: number, y: number): Cell;
-    get(coord: CoordLike): Cell;
-    get(_t: number | CoordLike, _x?: number, _y?: number): Cell {
+    get(t: number, x: number, y: number): GridCell;
+    get(coord: CoordLike): GridCell;
+    get(_t: number | CoordLike, _x?: number, _y?: number): GridCell {
         let t: number;
         let x: number;
         let y: number;
@@ -207,9 +237,9 @@ export class Grid implements GridLike {
         return this.data[t][y][x];
     }
 
-    getAllowOOB(t: number, x: number, y: number): Cell | undefined;
-    getAllowOOB(coord: CoordLike): Cell | undefined;
-    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): Cell | undefined {
+    getAllowOOB(t: number, x: number, y: number): GridCell | undefined;
+    getAllowOOB(coord: CoordLike): GridCell | undefined;
+    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): GridCell | undefined {
         let t: number;
         let x: number;
         let y: number;
@@ -229,10 +259,10 @@ export class Grid implements GridLike {
         }
     }
 
-    set(t: number, x: number, y: number, value: Cell): void;
-    set(pos: CoordLike, value: Cell): void;
-    set(_t: number | CoordLike, _x: number | Cell, _y?: number, _value?: Cell): void {
-        let value: Cell;
+    set(t: number, x: number, y: number, value: GridCell): void;
+    set(pos: CoordLike, value: GridCell): void;
+    set(_t: number | CoordLike, _x: number | GridCell, _y?: number, _value?: GridCell): void {
+        let value: GridCell;
         let t: number;
         let x: number;
         let y: number;
@@ -240,12 +270,12 @@ export class Grid implements GridLike {
             t = _t.t;
             x = _t.x;
             y = _t.y;
-            value = _x;
+            value = _x as GridCell;
         } else {
             t = _t;
-            x = _x;
+            x = _x as number;
             y = _y as number;
-            value = _value as Cell;
+            value = _value as GridCell;
         }
         if (!this.isInBounds(t, x, y)) {
             throw new Error(`Out of bounds set: t = ${t}, x = ${x}, y = ${y}`);
@@ -253,7 +283,7 @@ export class Grid implements GridLike {
         this.data[t][y][x] = value;
     }
 
-    entries(): IterableIterator<[Coord, Cell]> {
+    entries(): IterableIterator<[Coord, GridCell]> {
         let t = 0;
         let x = 0;
         let y = 0;
@@ -266,8 +296,18 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let pos = coord(t, x, y);
-                return {done: false, value: [pos, this.get(pos)]};
+                let pos = new Coord(t, x, y);
+                let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
             }
         };
     }
@@ -285,7 +325,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: new Coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -300,7 +340,7 @@ export class Grid implements GridLike {
         };
     }
 
-    cells(): IterableIterator<Cell> {
+    cells(): IterableIterator<GridCell> {
         let t = 0;
         let x = 0;
         let y = 0;
@@ -313,7 +353,7 @@ export class Grid implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -328,48 +368,48 @@ export class Grid implements GridLike {
         };
     }
 
-    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: Cell | (() => Cell)): void {
+    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: GridCell): void {
         let newWidth = this.width + left + right;
         let newHeight = this.height + top + bottom;
         let newGens = this.gens + start + end;
         // first make empty placeholders
-        let emptyRow: Cell[] = [];
+        let emptyRow: GridCell[] = [];
         for (let i = 0; i < newWidth; i++) {
-            emptyRow.push(typeof value === 'function' ? value() : value);
+            emptyRow.push(value.copy());
         }
-        let emptyLayer: Cell[][] = [];
+        let emptyLayer: GridCell[][] = [];
         for (let i = 0; i < newHeight; i++) {
-            emptyLayer.push(structuredClone(emptyRow));
+            emptyLayer.push(emptyRow.map(cell => cell.copy()));
         }
         // then paste them in
         for (let layer of this.data) {
             for (let row of layer) {
                 for (let i = 0; i < left; i++) {
-                    row.unshift(typeof value === 'function' ? value() : value);
+                    row.unshift(value.copy());
                 }
                 for (let i = 0; i < right; i++) {
-                    row.push(typeof value === 'function' ? value() : value);
+                    row.push(value.copy());
                 }
             }
             for (let i = 0; i < top; i++) {
-                layer.unshift(structuredClone(emptyRow));
+                layer.unshift(emptyRow.map(cell => cell.copy()));
             }
             for (let i = 0; i < bottom; i++) {
-                layer.push(structuredClone(emptyRow));
+                layer.push(emptyRow.map(cell => cell.copy()));
             }
         }
         for (let i = 0; i < start; i++) {
-            this.data.unshift(structuredClone(emptyLayer));
+            this.data.unshift(emptyLayer.map(row => row.map(cell => cell.copy())));
         }
         for (let i = 0; i < end; i++) {
-            this.data.push(structuredClone(emptyLayer));
+            this.data.push(emptyLayer.map(row => row.map(cell => cell.copy())));
         }
         this.width = newWidth;
         this.height = newHeight;
         this.gens = newGens;
     }
 
-    shrink({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}): void {
+    shrink({start = 0, end = 0, left = 0, right = 0, top = 0, bottom = 0}: {start?: number, end?: number, left?: number, right?: number, top?: number, bottom?: number}): void {
         let newWidth = this.width - left - right;
         let newHeight = this.height - top - bottom;
         let newGens = this.gens - start - end;
@@ -428,7 +468,7 @@ export class Grid implements GridLike {
     }
 
     flipAntiDiagonal(): void {
-        this.flipDiagonal()
+        this.flipDiagonal();
         this.rotate180();
     }
 
@@ -459,10 +499,10 @@ export class GridSlice implements GridLike {
         this.gens = this.end.t - this.start.t;
     }
 
-    get data(): Cell[][][] {
-        let out: Cell[][][] = [];
+    get data(): GridCell[][][] {
+        let out: GridCell[][][] = [];
         for (let t = 0; t < this.gens; t++) {
-            let layer: Cell[][] = [];
+            let layer: GridCell[][] = [];
             for (let y = 0; y < this.height; y++) {
                 let fullRow = this.grid.data[t + this.start.t][y + this.start.y];
                 layer.push(fullRow.slice(this.start.x, this.end.x));
@@ -504,9 +544,9 @@ export class GridSlice implements GridLike {
     }
 
 
-    get(t: number, x: number, y: number): Cell;
-    get(coord: CoordLike): Cell;
-    get(_t: number | CoordLike, _x?: number, _y?: number): Cell {
+    get(t: number, x: number, y: number): GridCell;
+    get(coord: CoordLike): GridCell;
+    get(_t: number | CoordLike, _x?: number, _y?: number): GridCell {
         let t: number;
         let x: number;
         let y: number;
@@ -525,9 +565,9 @@ export class GridSlice implements GridLike {
         return this.grid.data[t + this.start.t][y + this.start.y][x + this.start.x];
     }
 
-    getAllowOOB(t: number, x: number, y: number): Cell | undefined;
-    getAllowOOB(coord: CoordLike): Cell | undefined;
-    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): Cell | undefined {
+    getAllowOOB(t: number, x: number, y: number): GridCell | undefined;
+    getAllowOOB(coord: CoordLike): GridCell | undefined;
+    getAllowOOB(_t: number | CoordLike, _x?: number, _y?: number): GridCell | undefined {
         let t: number;
         let x: number;
         let y: number;
@@ -547,10 +587,10 @@ export class GridSlice implements GridLike {
         }
     }
 
-    set(t: number, x: number, y: number, value: Cell): void;
-    set(pos: CoordLike, value: Cell): void;
-    set(_t: number | CoordLike, _x: number | Cell, _y?: number, _value?: Cell): void {
-        let value: Cell;
+    set(t: number, x: number, y: number, value: GridCell): void;
+    set(pos: CoordLike, value: GridCell): void;
+    set(_t: number | CoordLike, _x: number | GridCell, _y?: number, _value?: GridCell): void {
+        let value: GridCell;
         let t: number;
         let x: number;
         let y: number;
@@ -558,12 +598,12 @@ export class GridSlice implements GridLike {
             t = _t.t;
             x = _t.x;
             y = _t.y;
-            value = _x;
+            value = _x as GridCell;
         } else {
             t = _t;
-            x = _x;
+            x = _x as number;
             y = _y as number;
-            value = _value as Cell;
+            value = _value as GridCell;
         }
         if (!this.isInBounds(t, x, y)) {
             throw new Error(`Out of bounds set: t = ${t}, x = ${x}, y = ${y}`);
@@ -571,8 +611,7 @@ export class GridSlice implements GridLike {
         this.grid.data[t + this.start.t][y + this.start.y][x + this.start.x] = value;
     }
 
-
-    entries(): IterableIterator<[Coord, Cell]> {
+    entries(): IterableIterator<[Coord, GridCell]> {
         let t = 0;
         let x = 0;
         let y = 0;
@@ -585,8 +624,18 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let pos = coord(t, x, y);
-                return {done: false, value: [pos, this.get(pos)]};
+                let pos = new Coord(t, x, y);
+                let out: IteratorResult<[Coord, GridCell]> = {done: false, value: [pos, this.get(pos)]};
+                x++;
+                if (x >= this.width) {
+                    x = 0;
+                    y++;
+                    if (y >= this.height) {
+                        y = 0;
+                        t++;
+                    }
+                }
+                return out;
             }
         };
     }
@@ -604,7 +653,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: coord(t, x, y)};
+                let out: IteratorResult<Coord> = {done: false, value: new Coord(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -619,7 +668,7 @@ export class GridSlice implements GridLike {
         };
     }
 
-    cells(): IterableIterator<Cell> {
+    cells(): IterableIterator<GridCell> {
         let t = 0;
         let x = 0;
         let y = 0;
@@ -632,7 +681,7 @@ export class GridSlice implements GridLike {
                 if (t >= this.gens) {
                     return {done: true, value: undefined};
                 }
-                let out = {done: false, value: this.get(coord(t, x, y))};
+                let out: IteratorResult<GridCell> = {done: false, value: this.get(t, x, y)};
                 x++;
                 if (x >= this.width) {
                     x = 0;
@@ -716,6 +765,15 @@ export class Options {
 
     periodic: {dx: number, dy: number, period: number} | undefined = undefined;
 
+    toString(): string {
+        let out: string[] = [];
+        if (this.periodic !== undefined) {
+            let {dx, dy, period} = this.periodic;
+            out.push(`periodic = (${dx}, ${dy})c/${period}`);
+        }
+        return out.join('\n');
+    }
+
     copy(): Options {
         let out = new Options();
         out.periodic = structuredClone(this.periodic);
@@ -735,15 +793,45 @@ export class ULP {
     clauses: Clause[] = [];
     
     grid: Grid;
-    background: Grid;
 
     options: Options;
 
     constructor(maxStates: number) {
         this.maxStates = maxStates;
         this.grid = new Grid();
-        this.background = new Grid();
         this.options = new Options();
+    }
+
+    toString(): string {
+        return [
+            ``,
+            `max_states = ${this.maxStates}`,
+            ``,
+            `[GRAPH]`,
+            ``,
+            `var_count = ${this.varCount}`,
+            ``,
+            `funcs:`,
+            ...this.funcs.map(func => func.toString()),
+            ``,
+            `clauses:`,
+            ...this.clauses.map(clause => clause.toString()),
+            ``,
+            `[GRID]`,
+            ``,
+            `width = ${this.grid.width}`,
+            `height = ${this.grid.height}`,
+            `gens = ${this.grid.gens}`,
+            ``,
+            ...this.grid.data.flatMap(layer => {
+                return [
+                    ...layer.map(row => row.map(cell => cell.value).join(' ')),
+                    ``,
+                ];
+            }).flat(),
+            `[OPTIONS]`,
+            this.options.toString(),
+        ].join('\n');
     }
 
     copy(): ULP {
@@ -763,7 +851,6 @@ export class ULP {
             out.clauses.push(copied);
         }
         out.grid = this.grid.copy();
-        out.background = this.background.copy();
         out.options = this.options.copy();
         return out;
     }
@@ -785,6 +872,16 @@ export class ULP {
     }
 
     reassign(from: Cell, to: Cell): void {
+        if (from < this.maxStates) {
+            if (to < this.maxStates) {
+                if (from !== to) {
+                    throw new XLSError(`Contradiction detected`);
+                }
+            } else {
+                this.reassign(to, from);
+            }
+            return;
+        }
         for (let clause of this.clauses) {
             for (let i = 0; i < clause.data.length; i++) {
                 if (clause.data[i] === from) {
@@ -792,9 +889,9 @@ export class ULP {
                 }
             }
         }
-        for (let [coord, cell] of this.grid.entries()) {
-            if (cell === from) {
-                this.grid.set(coord, to);
+        for (let cell of this.grid.cells()) {
+            if (cell.value === from) {
+                cell.value = to;
             }
         }
     }
@@ -807,27 +904,35 @@ export class ULP {
         this.reassign(x, y);
     }
 
-    addClauses(func: ClauseFunc, noclause?: Grid): void {
+    addRuleClauses(): void {
         let grid = this.grid;
-        for (let {t, x, y} of this.grid.coords()) {
-            if (t === this.grid.gens - 1) {
+        for (let [{t, x, y}, cell] of grid.entries()) {
+            // last generation is always noclause
+            if (t === grid.gens - 1) {
                 continue;
             }
-            if (noclause && noclause.get(t, x, y) === 1) {
+            if (cell.func === undefined) {
                 continue;
             }
-            this.addClause(func, [
-                grid.get(t + 1, x, y),
-                grid.getAllowOOB(t, x - 1, y - 1) ?? 0,
-                grid.getAllowOOB(t, x, y - 1) ?? 0,
-                grid.getAllowOOB(t, x + 1, y - 1) ?? 0,
-                grid.getAllowOOB(t, x - 1, y) ?? 0,
-                grid.get(t, x, y) ?? 0,
-                grid.getAllowOOB(t, x + 1, y) ?? 0,
-                grid.getAllowOOB(t, x - 1, y + 1) ?? 0,
-                grid.getAllowOOB(t, x, y + 1) ?? 0,
-                grid.getAllowOOB(t, x + 1, y + 1) ?? 0,
+            this.addClause(cell.func, [
+                grid.get(t + 1, x, y).value,
+                grid.getAllowOOB(t, x + 1, y + 1)?.value ?? 0,
+                grid.getAllowOOB(t, x + 1, y)?.value ?? 0,
+                grid.getAllowOOB(t, x + 1, y - 1)?.value ?? 0,
+                grid.getAllowOOB(t, x, y + 1)?.value ?? 0,
+                cell.value,
+                grid.getAllowOOB(t, x, y - 1)?.value ?? 0,
+                grid.getAllowOOB(t, x - 1, y)?.value ?? 0,
+                grid.getAllowOOB(t, x - 1, y - 1)?.value ?? 0,
             ]);
+        }
+    }
+
+    resolveNegativeOneUnknowns(): void {
+        for (let cell of this.grid.cells()) {
+            if (cell.value === UNKNOWN) {
+                cell.value = this.getNewVar();
+            }
         }
     }
 
@@ -849,13 +954,26 @@ export class ULP {
                 }
             }
         }
-        for (let [coord, cell] of this.grid.entries()) {
-            this.grid.set(coord, mapping[cell]);
+        for (let gridCell of this.grid.cells()) {
+            let cell = gridCell.value;
+            if (cell in mapping) {
+                gridCell.value = mapping[cell];
+            } else {
+                let value = this.getNewVar();
+                gridCell.value = value;
+                mapping[cell] = value;
+            }
         }
     }
 
     normalize(): void {
+        this.resolveNegativeOneUnknowns();
         this.removeUnusedVars();
     }
+
+}
+
+
+function getSimpleRuleFunc() {
 
 }
