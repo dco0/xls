@@ -95,7 +95,7 @@ static void safe_free(void* ptr) {
 
 // core type definitions
 
-typedef uint64_t Cell;
+typedef size_t Cell;
 #define C_OFF 0
 #define C_ON 1
 #define c_is_var(cell) ((cell) > 1)
