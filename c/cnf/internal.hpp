@@ -1,21 +1,25 @@
+
 #pragma once
 
+#include <stddef.h>
 #include <vector>
-#include <algorithm>
 
+#include "../base/base.cpp"
+#include "../base/search.cpp"
 #include "cnf.hpp"
 
 namespace cnf {
     typedef int lit;
     typedef std::vector<lit> clause;
 
+    struct cnf_holder;
     CNF_clauses* vec_to_clauses(const cnf_holder&);
     CNF_vmap* vec_to_vmap(const cnf_holder&);
 
     void preprocess_cnf(std::vector<std::vector<int>>&);
 
     struct cube { unsigned origin, span; };
-    std::vector<cube> make_primes(size_t, const Cell*);
+    std::vector<cube> make_primes(size_t, const Variable*);
     void make_proposition(const std::vector<lit>&, const std::vector<cube>&, std::vector<std::vector<lit>>&);
 
     struct vmap_entry {
@@ -44,10 +48,9 @@ namespace cnf {
 
     namespace cf {
         enum class Type {
-            BINARY_LUT, LOOKUP_TABLE
+            BINARY_LUT,
         };
         struct BinaryLut;
-        struct LookupTable;
         struct ClauseFunc {
             const ::ClauseFunc* cf;
             Type type;

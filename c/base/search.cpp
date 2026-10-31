@@ -49,7 +49,7 @@ struct ULP {
         if (func->vars != 10) {
             error("Rule function must have 10 inputs");
         }
-        if (func->type != CFT_LOOKUP_TABLE) {
+        if (func->type != ClauseFuncType::LOOKUP_TABLE) {
             error("Rule function must be a lookup table");
         }
         return const_cast<const Variable**>(func->data.lookup_table.table);
@@ -70,7 +70,7 @@ struct ULP {
                     if (c_is_var(value)) {
                         Variable* var = graph.vars[value];
                         if (var->value != V_UNKNOWN) {
-                            grid.set(t, x, y, v_to_c(var->value));
+                            grid.set(t, x, y, varvalue_to_cell(var->value));
                         }
                     }
                 }

@@ -123,13 +123,13 @@ struct LookupTableClauseFunc {
     Variable* table[];
 };
 
-enum ClauseFuncType : uint8_t {
-    CFT_LOOKUP_TABLE,
+enum class ClauseFuncType : uint8_t {
+    LOOKUP_TABLE,
 };
 
 struct ClauseFunc {
     size_t vars;
-    int type;
+    ClauseFuncType type;
     union {
         LookupTableClauseFunc lookup_table;
     } data;

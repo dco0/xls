@@ -1,14 +1,22 @@
+
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <vector>
+
+#include "../base/base.cpp"
 #include "internal.hpp"
 
 namespace cnf {
     struct entry { unsigned x, y, n; };
 
-    std::vector<cube> make_primes(size_t n, const Cell* lut) {
+    std::vector<cube> make_primes(size_t n, const Variable* lut) {
         std::vector<entry> t, s;
         std::vector<cube> res;
         for (unsigned i = 0; i < 1<<n; i++) {
-            if (!lut[i]) t.push_back({i, 0, 0});
-            if (lut[i] >= 2) error("Multi-rule searching is not supported");
+            if (!lut[i].value) t.push_back({i, 0, 0});
+            if (lut[i].value >= 2) error("Multi-rule searching is not supported");
         }
         for (entry& c : t) for (const entry& d : t) {
             uint64_t diff = c.x ^ d.x;

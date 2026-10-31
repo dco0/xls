@@ -1,5 +1,9 @@
+
 #pragma once
 
+#include <stddef.h>
+
+#include "../base/base.cpp"
 #include "../base/search.cpp"
 
 typedef struct CNF_clauses {
@@ -11,7 +15,7 @@ typedef struct CNF_clauses {
 typedef struct CNF_vmap_entry {
     size_t bits;
     size_t values;
-    bool data[0];
+    bool data[];
 } CNF_vmap_entry;
 
 typedef struct CNF_vmap {

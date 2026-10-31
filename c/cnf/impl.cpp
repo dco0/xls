@@ -1,14 +1,26 @@
+
+#pragma once
+
+#include <stddef.h>
+#include <vector>
+
+#include "../base/base.cpp"
+#include "../base/search.cpp"
 #include "internal.hpp"
 
 #define unreachable __builtin_unreachable();
 
 namespace cnf::cf {
     struct BinaryLut {
-        const ::LookupTableClauseFunc* cf;
         const ::ULP* ulp;
+        const ::ClauseFunc* cf;
         mutable bool cached = false;
         mutable std::vector<cube> cache;
-        BinaryLut(::ULP* ulp, ::LookupTableClauseFunc* cf) : ulp(ulp), cf(cf) {}
+        BinaryLut(::ULP* ulp, ::ClauseFunc* cf) : ulp(ulp), cf(cf) {
+            if (cf->type != ClauseFuncType::LOOKUP_TABLE) {
+                error("BinaryLut clause func must be a lookup table");
+            }
+        }
         size_t vars() const {
             return cf->vars;
         }
@@ -20,7 +32,7 @@ namespace cnf::cf {
         }
         std::vector<std::vector<lit>> enforce_constraint(const std::vector<std::vector<lit>>& cells) const {
             if (!cached) {
-                cache = make_primes(cf->vars, cf->data);
+                cache = make_primes(cf->vars, *cf->data.lookup_table.table);
                 cached = true;
             }
             std::vector<lit> flatcells(cells.size());
@@ -35,9 +47,9 @@ namespace cnf::cf {
 namespace cnf::cf {
     ClauseFunc::ClauseFunc(::ULP* ulp, ::ClauseFunc* cf) : cf(cf) {
         switch (cf->type) {
-            case (::ClauseFuncType::CFT_LOOKUP_TABLE):
+            case (::ClauseFuncType::LOOKUP_TABLE):
                 if (ulp->max_states != 2) error("not implemented");
-                impl.binary_lut = new BinaryLut{ulp, &cf->data.lookup_table};
+                impl.binary_lut = new BinaryLut{ulp, cf};
                 type = Type::BINARY_LUT;
                 break;
             default:

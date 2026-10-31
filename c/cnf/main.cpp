@@ -1,3 +1,14 @@
+
+#pragma once
+
+#include <stddef.h>
+#include <string.h>
+#include <vector>
+#include <algorithm>
+
+#include "../base/base.cpp"
+#include "../base/search.cpp"
+#include "cnf.hpp"
 #include "internal.hpp"
 
 namespace cnf {
@@ -17,8 +28,7 @@ namespace cnf {
     }
 
     CNF_vmap* vec_to_vmap(const cnf_holder& holder) {
-        constexpr vmap_entry *_test = 0;
-        constexpr size_t VMAP_OFFSET = (size_t)(_test+1);
+        constexpr size_t VMAP_OFFSET = sizeof(vmap_entry);
 
         size_t stride = 0;
         for (const auto& i : holder.vmap) {
@@ -29,7 +39,7 @@ namespace cnf {
         CNF_vmap* vmap = (CNF_vmap*) safe_malloc(sizeof(CNF_vmap) + stride * holder.vmap.size());
         vmap->var_count = holder.vmap.size();
         vmap->stride = stride / VMAP_OFFSET;
-        for (int i = 0; i < holder.vmap.size(); i++) {
+        for (size_t i = 0; i < holder.vmap.size(); i++) {
             const vmap_entry& src = holder.vmap[i];
             vmap->data[stride * i] = {.bits = src.bits, .values = src.values};
             memcpy(vmap->data[stride * i].data, src.table.data(), src.bits * src.values);
