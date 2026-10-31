@@ -1,13 +1,105 @@
 
 #pragma once
 
+#include <limits.h>
 #include <stddef.h>
 #include <string.h>
+#include <vector>
+#include <algorithm>
+#include <unordered_map>
 
+#include "params.hpp"
 #include "base.cpp"
 
 
-class Grid { public:
+class Grid {
+
+private:
+
+    inline static std::unordered_map<size_t, std::vector<Cell*>> free_lists;
+    inline static std::unordered_map<size_t, size_t> allocation_counts;
+    inline static size_t current_allocated_bytes = 0UZ;
+
+    static void clean_cache() {
+        // clean it to reasonably below the limit to avoid constant calling of this function
+        size_t target_bytes = GRID_CACHE_MAX_MEMORY * 0.75;
+        // gather all non-empty cache sizes and their frequencies
+        struct Candidate {
+            size_t size;
+            size_t freq;
+        };
+        std::vector<Candidate> candidates;
+        for (const auto& [cached_size, list] : free_lists) {
+            if (!list.empty()) {
+                candidates.push_back({cached_size, allocation_counts[cached_size]});
+            }
+        }
+        // sort by frequency ascending (least frequently used first)
+        std::sort(candidates.begin(), candidates.end(), 
+            [](const auto& a, const auto& b) {
+                return a.freq < b.freq;
+            }
+        );
+        // evict blocks from cold sizes until we are safely below the target watermark
+        for (const auto& c : candidates) {
+            auto& list = free_lists[c.size];
+            while (!list.empty() && current_allocated_bytes > target_bytes) {
+                Cell* ptr = list.back();
+                list.pop_back();
+                safe_free(ptr);
+                current_allocated_bytes -= c.size;
+            }
+            if (current_allocated_bytes <= target_bytes) {
+                break;
+            }
+            if (list.empty()) {
+                free_lists.erase(c.size);
+            }
+        }
+    }
+
+    static Cell* allocate_cells(size_t size) {
+        allocation_counts[size]++;
+        auto& list = free_lists[size];
+        if (!list.empty()) {
+            Cell* ptr = list.back();
+            list.pop_back();
+            return ptr;
+        } else {
+            current_allocated_bytes += size;
+            if (current_allocated_bytes > GRID_CACHE_MAX_MEMORY) {
+
+            }
+            return (Cell*)safe_malloc(size * sizeof(Cell));
+        }
+    }
+
+    static void deallocate_cells(Cell* ptr, size_t size) {
+        if (ptr == nullptr) {
+            return;
+        }
+        auto& list = free_lists[size];
+        size_t freq = allocation_counts[size];
+        size_t current_max_size = std::min(GRID_CACHE_MAX_SIZE, GRID_CACHE_BASE_SIZE + (size_t)((double)freq / GRID_CACHE_SIZE_SCALING));
+        if (list.size() < current_max_size) {
+            list.push_back(ptr);
+        } else {
+            current_allocated_bytes -= size;
+            safe_free(ptr);
+        }
+    }
+
+public:
+
+    static void destroy() {
+        for (const auto& [_, list] : free_lists) {
+            for (Cell* ptr : list) {
+                safe_free(ptr);
+            }
+        }
+        free_lists.clear();
+        allocation_counts.clear();
+    }
 
     size_t width;
     size_t height;
@@ -15,16 +107,16 @@ class Grid { public:
     size_t total_size;
     Cell* data;
 
-    Grid(size_t initial_width, size_t initial_height, size_t initial_gens) {
-        width = initial_width;
-        height = initial_height;
-        gens = initial_gens;
+    Grid(size_t width, size_t height, size_t gens) {
+        this->width = width;
+        this->height = height;
+        this->gens = gens;
         total_size = width * height * gens;
-        data = (Cell*)safe_malloc(total_size * sizeof(Cell));
+        data = allocate_cells(total_size);
     }
 
     ~Grid() {
-        safe_free(data);
+        deallocate_cells(data, total_size);
     }
 
     Cell get(size_t t, size_t x, size_t y) const {

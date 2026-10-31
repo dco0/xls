@@ -192,6 +192,7 @@ static bool set_variable(Variable* var, VarValue value) {
             data->clause->implication_pointer += data->change * 2;
         }
     }
+    search_data.set_unknown_cells++;
     return true;
 }
 
@@ -209,6 +210,7 @@ static void unset_variable(Variable* var) {
         }
     }
     var->value = V_UNKNOWN;
+    search_data.set_unknown_cells--;
 }
 
 static void init_clause_implication_tr(Clause* clause) {
@@ -220,15 +222,12 @@ static void init_clause_implication_tr(Clause* clause) {
 }
 
 
-static bool set_cell_and_propagate(Variable* cell, VarValue value, bool is_explicit);
+static bool set_variable_and_propagate(Variable& var, VarValue value, bool is_explicit);
 
 // returns false if contradiction, true if no contradiction
-static inline bool check_clause_implications(Clause* clause) {
-    if (clause == NULL) {
-        return true;
-    }
-    uint64_t code = *clause->implication_pointer;
-    debug(4, printf("Implication for clause %zu: transition = %ti, code = %" PRIu64 "\n", clause->number, clause->implication_pointer - implication_table, code));
+static inline bool check_clause_implications(Clause& clause) {
+    uint64_t code = *clause.implication_pointer;
+    debug(4, printf("Implication for clause %zu: transition = %ti, code = %" PRIu64 "\n", clause.number, clause.implication_pointer - implication_table, code));
     if (code == 1) {
         debug(3, printf("Contradiction in check_implications\n"));
         return false;
@@ -236,9 +235,9 @@ static inline bool check_clause_implications(Clause* clause) {
     while (code != 0) {
         int instruction = ((int)code) & 63;
         int cell_pos = instruction & 15;
-        Variable* var = clause->vars[instruction & 15];
+        Variable& var = *clause.vars[instruction & 15];
         VarValue value = (VarValue)(instruction >> 4);
-        if (!set_cell_and_propagate(var, value, false)) {
+        if (!set_variable_and_propagate(var, value, false)) {
             return false;
         }
         code >>= 6;
@@ -246,12 +245,12 @@ static inline bool check_clause_implications(Clause* clause) {
     return true;
 }
 
-static inline bool check_cell_implications(Variable* var) {
-    debug(4, printf("Checking implications for variable %zu\n", var->number));
+static inline bool check_cell_implications(Variable& var) {
+    debug(4, printf("Checking implications for variable %zu\n", var.number));
     inc_debug_depth();
-    for (size_t i = 0; i < var->use_count; i++) {
-        VarUse* data = &(var->uses[i]);
-        if (!check_clause_implications(var->uses[i].clause)) {
+    for (size_t i = 0; i < var.use_count; i++) {
+        VarUse* data = &(var.uses[i]);
+        if (!check_clause_implications(*var.uses[i].clause)) {
             dec_debug_depth();
             return false;
         }
@@ -262,11 +261,11 @@ static inline bool check_cell_implications(Variable* var) {
 
 // set a cell in the search state, propagating checks
 // returns false if contradiction, true if no contradiction
-static bool set_variable_and_propagate(Variable* var, VarValue value, bool is_explicit) {
-    debug(3, printf("Setting variable %zu and propagating: value = %i\n", var->number, value));
-    if (var->value != V_UNKNOWN) {
+static bool set_variable_and_propagate(Variable& var, VarValue value, bool is_explicit) {
+    debug(3, printf("Setting variable %zu and propagating: value = %i\n", var.number, value));
+    if (var.value != V_UNKNOWN) {
         // unexpected_error("Setting known cell");
-        return var->value == value;
+        return var.value == value;
     }
     if (!set_variable_and_push(var, value, is_explicit)) {
         return false;

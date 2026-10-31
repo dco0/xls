@@ -1,4 +1,5 @@
-import { XLSError, ULP, LookupTableClauseFunc, type ClauseFunc, type Options, GridCell } from "./base.js";
+
+import {XLSError, ULP, LookupTableClauseFunc, ClauseFunc, Options, GridCell} from "./base.js";
 
 export enum FileFormat { ULP, CNF, LLS, INVALID };
 

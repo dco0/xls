@@ -320,7 +320,7 @@ static std::string get_rule(bool use_maxrule) {
             out = unparse_map(trs);
         }
     }
-    if (s.options.after_rule_text != NULL) {
+    if (s.options.after_rule_text != nullptr) {
         out += s.options.after_rule_text;
     }
     return out;
@@ -461,6 +461,8 @@ static void print_grid_pretty(const Grid& grid, bool is_solution) {
         }
     }
 }
+
+
 
 typedef uint64_t Hash;
 #define PRIhash PRIu64
@@ -631,6 +633,9 @@ static Hash grid_hash_full(const Grid& grid) {
 }
 
 
+Hash* prev_solutions;
+
+
 static bool solution_is_empty(const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
@@ -657,7 +662,7 @@ static bool solution_is_subperiod(const Grid& grid) {
     return false;
 }
 
-static void check_solution(bool preprocessing) {
+static void check_solution(bool preprocessing, bool (*check_duplicate)(Grid& grid)) {
     #define drop_solution(msg) \
         debug(2, printf("Dropping solution (" msg ")\n")); \
         if (preprocessing) { \
@@ -672,6 +677,11 @@ static void check_solution(bool preprocessing) {
     }
     if (solution_is_subperiod(hash_grid)) {
         drop_solution("subperiod");
+    }
+    if (check_duplicate != nullptr) {
+        if (!check_duplicate(hash_grid)) {
+            drop_solution("duplicate");
+        }
     }
     // show the solution
     search_data.solutions_found++;

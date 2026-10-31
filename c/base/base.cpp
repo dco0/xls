@@ -72,7 +72,7 @@
 
 static void* safe_malloc(size_t size) {
     void* out = malloc(size);
-    if (out == NULL) {
+    if (out == nullptr) {
         error("In malloc(): %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -81,7 +81,7 @@ static void* safe_malloc(size_t size) {
 
 static void* safe_realloc(void* ptr, size_t size) {
     void* out = realloc(ptr, size);
-    if (out == NULL) {
+    if (out == nullptr) {
         error("In realloc(): %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
