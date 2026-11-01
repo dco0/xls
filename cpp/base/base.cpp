@@ -74,7 +74,6 @@ static void* safe_malloc(size_t size) {
     void* out = malloc(size);
     if (out == nullptr) {
         error("In malloc(): %s", strerror(errno));
-        exit(EXIT_FAILURE);
     }
     return out;
 }
@@ -83,7 +82,6 @@ static void* safe_realloc(void* ptr, size_t size) {
     void* out = realloc(ptr, size);
     if (out == nullptr) {
         error("In realloc(): %s", strerror(errno));
-        exit(EXIT_FAILURE);
     }
     return out;
 }
@@ -117,10 +115,8 @@ enum VarValue : uint8_t {
     return value - 1;
 }
 
-struct Variable;
-
 struct LookupTableClauseFunc {
-    Variable* table[];
+    Cell table[];
 };
 
 enum class ClauseFuncType : uint8_t {
@@ -158,6 +154,10 @@ struct Clause {
     uint64_t* implication_pointer;
     size_t var_count;
     Variable* vars[];
+};
+
+Variable off_var = {
+    .number = 0,
 };
 
 

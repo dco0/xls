@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <stddef.h>
 #include <errno.h>
 #include <stdint.h>
@@ -162,44 +163,126 @@ namespace ulp_parser {
         }
     }
 
-    #define ulp_error(format, ...) \
-        do { \
-            long pos = ftell(file); \
-            fclose(file); \
-            error("Invalid ULP (near position %li): " format, pos __VA_OPT__(,) __VA_ARGS__); \
-        } while (0);
+    int ulp_error_line = 1;
 
-    [[gnu::format(scanf, 2, 3)]] static bool parse_line(FILE* file, const char* format, ...) {
-        // run vfscanf
+    static void _ulp_error(FILE* file, const char* format, ...) {
+        long error_pos = ftell(file);
+        if (error_pos == -1) {
+            fclose(file);
+            error("ftell() failed while parsing ULP: %s", strerror(errno));
+        }
+        if (fseek(file, 0, SEEK_SET) != 0) {
+            fclose(file);
+            error("fseek() failed while parsing ULP: %s", strerror(errno));
+        }
+        ulp_error_line = 1;
+        while (true) {
+            long current_pos = ftell(file);
+            if (current_pos == -1) {
+                fclose(file);
+                error("ftell() failed while parsing ULP: %s", strerror(errno));
+            } else if (current_pos >= error_pos) {
+                break;
+            }
+            int c = fgetc(file);
+            if (c == EOF) {
+                break;
+            } else if (c == '\n') {
+                ulp_error_line++;
+            }
+        }
+        fclose(file);
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+        exit(EXIT_FAILURE);
+    }
+
+    #define ulp_error(file, format, ...) _ulp_error(file, "Invalid ULP (near line %i): " format, ulp_error_line __VA_OPT__(,) __VA_ARGS__)
+
+    static inline int get_format_arg_count(const char* format) {
+        int out = 0;
+        for (size_t i = 0; format[i] != '\0'; i++) {
+            if (format[i] == '%') {
+                i++;
+                char next = format[i];
+                if (!(next == '%' || next == '*' || next == 'n')) {
+                    out++;
+                }
+            }
+        }
+        return out;
+    }
+
+    // we need to add special code for check that adds in %n to determine
+    // whether the correct number of characters was read for 0-argument format strings
+    // we don't need to do this for check_line because that forces it to be a full line
+
+    int check_count = 0;
+
+    [[gnu::format(scanf, 2, 3)]] static bool _check(FILE* file, const char* format, ...) {
         long start_pos = ftell(file);
         if (start_pos == -1) {
             fclose(file);
-            error("Could not read ULP (ftell returned -1)");
+            error("ftell() failed while parsing ULP: %s", strerror(errno));
         }
+        // run vfscanf
         va_list args;
         va_start(args, format);
         int value = vfscanf(file, format, args);
         va_end(args);
         if (value == EOF) {
             check_ferror(file);
-            fseek(file, start_pos, SEEK_SET);
+            if (fseek(file, start_pos, SEEK_SET) != 0) {
+                fclose(file);
+                error("fseek() failed while parsing ULP: %s", strerror(errno));
+            }
             return false;
         }
-        // get number of format args
-        int format_args = 0;
-        for (size_t i = 0; format[i] != '\0'; i++) {
-            if (format[i] == '%') {
-                char next = format[i + 1];
-                if (next == '%' || next == '*' || next == 'n') {
-                    i++;
-                    continue;
+        int count = get_format_arg_count(format);
+        if (value == count) {
+            if (count == 0) {
+                if (check_count >= (int)strlen(format)) {
+                    return true;
                 } else {
-                    format_args++;
+                    return false;
                 }
+            } else {
+                return true;
             }
+        } else {
+            if (fseek(file, start_pos, SEEK_SET) != 0) {
+                fclose(file);
+                error("fseek() failed while parsing ULP: %s", strerror(errno));
+            }
+            return false;
+        }
+    }
+
+    #define check(file, format, ...) _check(file, format "%n" __VA_OPT__(,) __VA_ARGS__ , &check_count)
+
+    [[gnu::format(scanf, 2, 3)]] static bool parse_line(FILE* file, const char* format, ...) {
+        long start_pos = ftell(file);
+        if (start_pos == -1) {
+            fclose(file);
+            error("Could not read ULP (ftell returned -1)");
+        }
+        // run vfscanf
+        va_list args;
+        va_start(args, format);
+        int value = vfscanf(file, format, args);
+        va_end(args);
+        if (value == EOF) {
+            check_ferror(file);
+            if (fseek(file, start_pos, SEEK_SET) != 0) {
+                fclose(file);
+                error("fseek() failed while parsing ULP: %s", strerror(errno));
+            }
+            return false;
         }
         // printf("Testing '%s': %i out of %i\n", format, value, format_args);
-        if (value == format_args) {
+        if (value == get_format_arg_count(format)) {
             // eat trailing whitespace on the line
             // it must find a newline or EOF!
             bool found = false;
@@ -223,11 +306,17 @@ namespace ulp_parser {
             if (found) {
                 return true;
             } else {
-                fseek(file, start_pos, SEEK_SET);
+                if (fseek(file, start_pos, SEEK_SET) != 0) {
+                    fclose(file);
+                    error("fseek() failed while parsing ULP: %s", strerror(errno));
+                }
                 return false;
             }
         } else {
-            fseek(file, start_pos, SEEK_SET);
+            if (fseek(file, start_pos, SEEK_SET) != 0) {
+                fclose(file);
+                error("fseek() failed while parsing ULP: %s", strerror(errno));
+            }
             return false;
         }
     }
@@ -258,14 +347,39 @@ namespace ulp_parser {
         size_t v_size;
         if (parse_line(file, "var_count = %zu", &v_size)) {
             out.graph.var_count = v_size;
-            size_t size = out.graph.var_count * sizeof(Variable*);
-            if (out.graph.vars != nullptr) {
-                out.graph.vars = (Variable**)safe_realloc(out.graph.vars, size);
-            } else {
-                out.graph.vars = (Variable**)safe_malloc(size);
+            size_t len = v_size + 2;
+            // realloc behaves like malloc for null pointers
+            out.graph.vars = (Variable**)safe_realloc(out.graph.vars, v_size * sizeof(Variable*));
+        } else if (parse_line(file, "funcs : %zu", &v_size)) {
+            if (out.graph.vars == nullptr) {
+                ulp_error(file, "funcs provided before var_count");
+            }
+            out.graph.func_count = v_size;
+            // realloc behaves like malloc for null pointers
+            out.graph.funcs = (ClauseFunc**)safe_realloc(out.graph.funcs, v_size * sizeof(ClauseFunc*));
+            for (size_t i = 0; i < v_size; i++) {
+                size_t vars;
+                if (!check(file, " %zu", &vars)) {
+                    ulp_error(file, "No variable count provided for clause func %zu", i);
+                }
+                if (check(file, " lookup_table")) {
+                    size_t len = 1UZ << vars;
+                    ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(Cell));
+                    func->type = ClauseFuncType::LOOKUP_TABLE;
+                    func->vars = vars;
+                    for (size_t i = 0; i < len; i++) {
+                        Cell value;
+                        if (!check(file, " %zu", &value)) {
+                            ulp_error(file, "Lookup table entry %zu missing for clause func %zu", value, i);
+                        }
+                        func->data.lookup_table.table[i] = value;
+                    }
+                } else {
+                    ulp_error(file, "Invalid type for clause func %zu", i);
+                }
             }
         } else {
-            ulp_error("Invalid line in [GRAPH]");
+            ulp_error(file, "Invalid line in [GRAPH]");
         }
     }
 
@@ -281,7 +395,7 @@ namespace ulp_parser {
         }
     }
 
-    static void parse_ulp(ULP& out, FILE* file) {
+    static void parse_file(ULP& out, FILE* file) {
         enum { NONE, GRAPH, GRID, OPTIONS } section = NONE;
         while (true) {
             if (!eat_whitespace(file)) {
@@ -314,6 +428,9 @@ namespace ulp_parser {
             }
         }
     }
+
+    #undef ulp_error
+    #undef check
 
     static inline bool parse_part_of_file(ULP& out, FILE* file) {
 
@@ -455,8 +572,6 @@ namespace ulp_parser {
         }
         return true;
     }
-
-    #undef ulp_error
 
     #if IN_BROWSER
     char search_file[] = SEARCH_FILE_GOES_HERE;
