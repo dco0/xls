@@ -5,13 +5,13 @@
 
 #include "base/base.cpp"
 #include "base/ulp.cpp"
-#include "base/solutions.cpp"
-#include "cnf/index.cpp"
+#include "base/search.cpp"
 #include "vls/implications.cpp"
 
 
 int main(int argc, [[maybe_unused]] char** argv) {
-    ULP ulp;
+    Search search;
+    ULP& ulp = search.ulp;
     errno = 0;
     #if IN_BROWSER
         if (argc != 0) {
@@ -28,8 +28,10 @@ int main(int argc, [[maybe_unused]] char** argv) {
     if (file == NULL) {
         error("Cannot read search file: %s", strerror(errno));
     }
-    ulp_parser::parse_file(ulp, file);
+    ULPParser parser = ULPParser(ulp, file);
+    parser.parse();
     fclose(file);
     printf("Loaded search: %zu variables, %zu clauses\n", ulp.graph.var_count, ulp.graph.clause_count);
     vls::init_implications(ulp);
+    vls::current_search = search;
 }

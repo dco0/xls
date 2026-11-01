@@ -12,6 +12,7 @@
 #include "base.cpp"
 #include "grid.cpp"
 #include "ulp.cpp"
+#include "search.cpp"
 #include "rule.cpp"
 
 
@@ -302,7 +303,8 @@ static bool is_duplicate(const ULP& ulp, const Grid& grid) {
     }
 }
 
-static void check(ULP& ulp, bool preprocessing) {
+static void check(Search& search, bool preprocessing) {
+    ULP& ulp = search.ulp;
     #define drop_solution(msg) \
         debug(2, printf("Dropping solution (" msg ")\n")); \
         if (preprocessing) { \
@@ -322,7 +324,7 @@ static void check(ULP& ulp, bool preprocessing) {
         drop_solution("duplicate");
     }
     // show the solution
-    search_data.solutions_found++;
+    search.solutions_found++;
     if (ulp.options.show_solutions) {
         if (preprocessing) {
             printf("Solved in preprocessing, 1 solution:\n");
@@ -332,10 +334,9 @@ static void check(ULP& ulp, bool preprocessing) {
         print_grid_pretty(ulp, solution_grid, true);
     }
     if (ulp.options.max_solutions > 0) {
-        if (search_data.solutions_found >= ulp.options.max_solutions) {
-            double time = get_time() - search_data.start_time;
-            printf("Search complete, found %zu solution%s in %.6f second%s, %zu branch%s (exited early, max solution count reached)\n", plural(search_data.solutions_found, "s"), plural(time, "s"), plural(search_data.branches, "es"));
-            destroy_all();
+        if (search.solutions_found >= ulp.options.max_solutions) {
+            double time = get_time() - search.start_time;
+            printf("Search complete, found %zu solution%s in %.6f second%s, %zu branch%s (exited early, max solution count reached)\n", plural(search.solutions_found, "s"), plural(time, "s"), plural(search.branches, "es"));
             exit(EXIT_SUCCESS);
         }
     }

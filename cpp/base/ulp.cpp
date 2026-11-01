@@ -10,9 +10,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <time.h>
-// sometimes it's not defined, so we have to do this
-extern int nanosleep(const struct timespec *__requested_time, struct timespec *__remaining);
 #include <optional>
 
 #include "base.cpp"
@@ -81,73 +78,22 @@ struct ULP {
 };
 
 
-struct {
-    size_t set_unknown_cells;
-    size_t start_unknown_cells;
-    uintmax_t solutions_found;
-    uintmax_t branches;
-    double start_time;
-} search_data;
+class ULPParser {
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-    #ifdef _MSC_VER
-        #include <intrin.h>
-    #else
-        #include <x86intrin.h>
-    #endif
-    static uint64_t read_counter() {
-        return __rdtsc();
+private:
+
+    ULP& out;
+    FILE* file;
+
+public:
+
+    ULPParser(ULP& ulp, FILE* file) : out(ulp) {
+        this->file = file;
     }
-#elif defined(__aarch64__)
-    static uint64_t read_counter() {
-        uint64_t val;
-        __asm__ volatile("mrs %0, cntvct_el0" : "=r" (val));
-        return val;
-    }
-#elif defined(__riscv) && __riscv_xlen == 64
-    static uint64_t read_counter() {
-        uint64_t cycles;
-        __asm__ volatile("rdcycle %0" : "=r"(cycles));
-        return cycles;
-    }
-#elif defined(__powerpc__) || defined(__ppc__)
-    static uint64_t read_counter() {
-        uint64_t tb;
-        __asm__ volatile("mfspr %0, 268" : "=r"(tb));
-        return tb;
-    }
-#else
-    static uint64_t read_counter() {
-        return __builtin_readcyclecounter();
-    }
-#endif
 
+private:
 
-static double cycles_per_second;
-
-static void calibrate_time() {
-    struct timespec request;
-    struct timespec remainder;
-    // 0.01 seconds
-    request.tv_sec = 0;
-    request.tv_nsec = 10000000L;
-    uint64_t start = read_counter();
-    nanosleep(&request, &remainder);
-    uint64_t end = read_counter();
-    cycles_per_second = (end - start) * 100;
-}
-
-static double get_time() {
-    return (double)(read_counter()) / cycles_per_second;
-}
-
-// cleans up the search state
-void destroy_all();
-
-
-namespace ulp_parser {
-
-    static inline void check_ferror(FILE* file) {
+    inline void check_ferror() {
         if (ferror(file)) {
             fclose(file);
             error("Could not read ULP (possibly corrupted)");
@@ -156,7 +102,7 @@ namespace ulp_parser {
 
     int ulp_error_line = 1;
 
-    static void _ulp_error(FILE* file, const char* format, ...) {
+    void _ulp_error(const char* format, ...) {
         long error_pos = ftell(file);
         if (error_pos == -1) {
             fclose(file);
@@ -190,9 +136,9 @@ namespace ulp_parser {
         exit(EXIT_FAILURE);
     }
 
-    #define ulp_error(file, format, ...) _ulp_error(file, "Invalid ULP (near line %i): " format, ulp_error_line __VA_OPT__(,) __VA_ARGS__)
+    #define ulp_error(format, ...) _ulp_error("Invalid ULP (near line %i): " format, ulp_error_line __VA_OPT__(,) __VA_ARGS__)
 
-    static inline int get_format_arg_count(const char* format) {
+    inline int get_format_arg_count(const char* format) {
         int out = 0;
         for (size_t i = 0; format[i] != '\0'; i++) {
             if (format[i] == '%') {
@@ -212,7 +158,7 @@ namespace ulp_parser {
 
     int check_count = 0;
 
-    [[gnu::format(scanf, 2, 3)]] static bool _check(FILE* file, const char* format, ...) {
+    [[gnu::format(scanf, 2, 3)]] bool _check(const char* format, ...) {
         long start_pos = ftell(file);
         if (start_pos == -1) {
             fclose(file);
@@ -224,7 +170,7 @@ namespace ulp_parser {
         int value = vfscanf(file, format, args);
         va_end(args);
         if (value == EOF) {
-            check_ferror(file);
+            check_ferror();
             if (fseek(file, start_pos, SEEK_SET) != 0) {
                 fclose(file);
                 error("fseek() failed while parsing ULP: %s", strerror(errno));
@@ -251,9 +197,9 @@ namespace ulp_parser {
         }
     }
 
-    #define check(file, format, ...) _check(file, format "%n" __VA_OPT__(,) __VA_ARGS__ , &check_count)
+    #define check(format, ...) _check(format "%n" __VA_OPT__(,) __VA_ARGS__ , &check_count)
 
-    [[gnu::format(scanf, 2, 3)]] static bool parse_line(FILE* file, const char* format, ...) {
+    [[gnu::format(scanf, 2, 3)]] bool parse_line(const char* format, ...) {
         long start_pos = ftell(file);
         if (start_pos == -1) {
             fclose(file);
@@ -265,7 +211,7 @@ namespace ulp_parser {
         int value = vfscanf(file, format, args);
         va_end(args);
         if (value == EOF) {
-            check_ferror(file);
+            check_ferror();
             if (fseek(file, start_pos, SEEK_SET) != 0) {
                 fclose(file);
                 error("fseek() failed while parsing ULP: %s", strerror(errno));
@@ -280,7 +226,7 @@ namespace ulp_parser {
             while (true) {
                 int c = fgetc(file);
                 if (c == EOF) {
-                    check_ferror(file);
+                    check_ferror();
                     found = true;
                     break;
                 } else if (c == '\n') {
@@ -314,11 +260,11 @@ namespace ulp_parser {
 
     // all these functions return true if no EOF, false if EOF
 
-    static bool eat_whitespace(FILE* file) {
+    bool eat_whitespace() {
         while (true) {
             int c = fgetc(file);
             if (c == EOF) {
-                check_ferror(file);
+                check_ferror();
                 // we've reached the end of the file
                 return false;
             } else if (isspace(c)) {
@@ -331,93 +277,95 @@ namespace ulp_parser {
         return true;
     }
 
-    static bool parse_graph_line(ULP& out, FILE* file) {
-        if (!eat_whitespace(file)) {
+    bool parse_graph_line() {
+        if (!eat_whitespace()) {
             return false;
         }
         size_t v_size;
-        if (parse_line(file, "var_count = %zu", &v_size)) {
+        if (parse_line("var_count = %zu", &v_size)) {
             out.graph.var_count = v_size;
             // TODO: MAYBE THE SIZE IS ALREADY INCREMENTED BY 2???
             static_cast<const int>(1);
             size_t len = v_size + 2;
             // realloc behaves like malloc for null pointers
             out.graph.vars = (Variable**)safe_realloc(out.graph.vars, v_size * sizeof(Variable*));
-        } else if (parse_line(file, "funcs : %zu", &v_size)) {
+        } else if (parse_line("funcs : %zu", &v_size)) {
             if (out.graph.vars == nullptr) {
-                ulp_error(file, "funcs provided before var_count");
+                ulp_error("funcs provided before var_count");
             }
             out.graph.func_count = v_size;
             // realloc behaves like malloc for null pointers
             out.graph.funcs = (ClauseFunc**)safe_realloc(out.graph.funcs, v_size * sizeof(ClauseFunc*));
             for (size_t i = 0; i < v_size; i++) {
                 size_t vars;
-                if (!check(file, " %zu", &vars)) {
-                    ulp_error(file, "No variable count provided for clause func %zu", i);
+                if (!check(" %zu", &vars)) {
+                    ulp_error("No variable count provided for clause func %zu", i);
                 }
-                if (check(file, " lookup_table")) {
+                if (check(" lookup_table")) {
                     size_t len = 1UZ << vars;
                     ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(Cell));
                     func->type = ClauseFuncType::LOOKUP_TABLE;
                     func->vars = vars;
                     for (size_t i = 0; i < len; i++) {
                         Cell value;
-                        if (!check(file, " %zu", &value)) {
-                            ulp_error(file, "Lookup table entry %zu missing for clause func %zu", value, i);
+                        if (!check(" %zu", &value)) {
+                            ulp_error("Lookup table entry %zu missing for clause func %zu", value, i);
                         }
                         func->data.lookup_table.table[i] = value;
                     }
                 } else {
-                    ulp_error(file, "Invalid type for clause func %zu", i);
+                    ulp_error("Invalid type for clause func %zu", i);
                 }
             }
         } else {
-            ulp_error(file, "Invalid line in [GRAPH]");
+            ulp_error("Invalid line in [GRAPH]");
         }
     }
 
-    static bool parse_grid_line(ULP& out, FILE* file) {
-        if (!eat_whitespace(file)) {
+    bool parse_grid_line() {
+        if (!eat_whitespace()) {
             return false;
         }
     }
 
-    static bool parse_options_line(ULP& out, FILE* file) {
-        if (!eat_whitespace(file)) {
+    bool parse_options_line() {
+        if (!eat_whitespace()) {
             return false;
         }
     }
 
-    static void parse_file(ULP& out, FILE* file) {
+public:    
+
+    void parse() {
         enum { NONE, GRAPH, GRID, OPTIONS } section = NONE;
         while (true) {
-            if (!eat_whitespace(file)) {
+            if (!eat_whitespace()) {
                 break;
             }
             size_t v_size;
-            if (parse_line(file, "max_states = %zu", &v_size)) {
+            if (parse_line("max_states = %zu", &v_size)) {
                 out.max_states = v_size;
                 section = NONE;
-            } else if (parse_line(file, "[ GRAPH ]")) {
+            } else if (parse_line("[ GRAPH ]")) {
                 section = GRAPH;
-            } else if (parse_line(file, "[ GRID ]")) {
+            } else if (parse_line("[ GRID ]")) {
                 section = GRID;
-            } else if (parse_line(file, "[ OPTIONS ]")) {
+            } else if (parse_line("[ OPTIONS ]")) {
                 section = OPTIONS;
             } else if (section == GRAPH) {
-                if (!parse_graph_line(out, file)) {
+                if (!parse_graph_line()) {
                     break;
                 }
             } else if (section == GRID) {
-                if (!parse_graph_line(out, file)) {
+                if (!parse_graph_line()) {
                     break;
                 }
             } else if (section == OPTIONS) {
-                if (!parse_graph_line(out, file)) {
+                if (!parse_graph_line()) {
                     break;
                 }
             } else {
-                ulp_error(file, "Invalid line\n");
+                ulp_error("Invalid line\n");
             }
         }
     }
@@ -425,4 +373,4 @@ namespace ulp_parser {
     #undef ulp_error
     #undef check
 
-}
+};

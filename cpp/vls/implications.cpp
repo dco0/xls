@@ -9,10 +9,14 @@
 
 #include "../base/base.cpp"
 #include "../base/ulp.cpp"
+#include "../base/search.cpp"
 #include "stack.cpp"
 
 
 namespace vls {
+
+
+static Search current_search;
 
 
 typedef uint64_t ImplicState[16];
@@ -205,7 +209,7 @@ static bool set_variable(Variable* var, VarValue value) {
             data->clause->implication_pointer += data->change * 2;
         }
     }
-    search_data.set_unknown_cells++;
+    current_search.set_unknown_cells++;
     return true;
 }
 
@@ -223,7 +227,7 @@ static void unset_variable(Variable* var) {
         }
     }
     var->value = V_UNKNOWN;
-    search_data.set_unknown_cells--;
+    current_search.set_unknown_cells--;
 }
 
 
