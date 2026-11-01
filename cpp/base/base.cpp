@@ -158,6 +158,14 @@ struct Clause {
 
 Variable off_var = {
     .number = 0,
+    .value = V_OFF,
+    .use_count = 0,
+};
+
+Variable on_var = {
+    .number = 0,
+    .value = V_ON,
+    .use_count = 0,
 };
 
 

@@ -125,11 +125,11 @@ const INTSpec hex_int = {
 };
 
 static void get_trs_from_clause_funcs(int* trs, int unknown_tr_value) {
-    const Variable** table = s.get_rule_func();
+    const Cell* table = s.get_rule_func();
     for (int i = 0; i < 512; i++) {
         int j = (i & 273) | ((i >> 2) & 34) | ((i >> 4) & 4) | ((i << 2) & 136) | ((i << 4) & 64);
-        Cell zero = table[(j << 1) | 0]->value;
-        Cell one = table[(j << 1) | 1]->value;
+        Cell zero = table[(j << 1) | 0];
+        Cell one = table[(j << 1) | 1];
         if (zero == 1 && one == 0) {
             trs[i] = 0;
         } else if (zero == 0 && one == 1) {
@@ -328,8 +328,7 @@ static std::string get(bool use_maxrule) {
 
 
 static Transformations get_identity_transforms() {
-    Cell func[1024];
-    s.get_rule_func_cells(func);
+    const Cell* func = s.get_rule_func();
     Transformations out;
     // rotation symmetries
     bool C2 = true;

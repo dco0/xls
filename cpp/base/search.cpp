@@ -51,7 +51,7 @@ struct ULP {
 
     } options;
 
-    const Variable** get_rule_func() {
+    const Cell* get_rule_func() {
         ClauseFunc* func = graph.funcs[graph.rule_func_index];
         if (func->vars != 10) {
             error("Rule function must have 10 inputs");
@@ -59,14 +59,7 @@ struct ULP {
         if (func->type != ClauseFuncType::LOOKUP_TABLE) {
             error("Rule function must be a lookup table");
         }
-        return const_cast<const Variable**>(func->data.lookup_table.table);
-    }
-
-    void get_rule_func_cells(Cell* out) {
-        const Variable** func = get_rule_func();
-        for (size_t i = 0; i < 1024; i++) {
-            out[i] = func[i]->value;
-        }
+        return const_cast<const Cell*>(func->data.lookup_table.table);
     }
 
     void sync_search_grid() {
@@ -347,6 +340,8 @@ namespace ulp_parser {
         size_t v_size;
         if (parse_line(file, "var_count = %zu", &v_size)) {
             out.graph.var_count = v_size;
+            // TODO: MAYBE THE SIZE IS ALREADY INCREMENTED BY 2???
+            static_cast<const int>(1);
             size_t len = v_size + 2;
             // realloc behaves like malloc for null pointers
             out.graph.vars = (Variable**)safe_realloc(out.graph.vars, v_size * sizeof(Variable*));
