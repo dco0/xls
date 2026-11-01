@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "../base/base.cpp"
-#include "../base/search.cpp"
+#include "../base/ulp.cpp"
 #include "internal.hpp"
 
 #define unreachable __builtin_unreachable();
@@ -32,7 +32,7 @@ namespace cnf::cf {
         }
         std::vector<std::vector<lit>> enforce_constraint(const std::vector<std::vector<lit>>& cells) const {
             if (!cached) {
-                cache = make_primes(cf->vars, *cf->data.lookup_table.table);
+                cache = make_primes(cf->vars, cf->data.lookup_table.table);
                 cached = true;
             }
             std::vector<lit> flatcells(cells.size());

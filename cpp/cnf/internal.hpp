@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "../base/base.cpp"
-#include "../base/search.cpp"
+#include "../base/ulp.cpp"
 #include "cnf.hpp"
 
 namespace cnf {
@@ -19,7 +19,7 @@ namespace cnf {
     void preprocess_cnf(std::vector<std::vector<int>>&);
 
     struct cube { unsigned origin, span; };
-    std::vector<cube> make_primes(size_t, const Variable*);
+    std::vector<cube> make_primes(size_t, const Cell*);
     void make_proposition(const std::vector<lit>&, const std::vector<cube>&, std::vector<std::vector<lit>>&);
 
     struct vmap_entry {

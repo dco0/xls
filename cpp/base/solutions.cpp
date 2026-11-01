@@ -5,21 +5,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <memory>
-#include <optional>
+#include <vector>
 #include <string>
+#include <algorithm>
 
 #include "base.cpp"
 #include "grid.cpp"
-#include "params.hpp"
-#include "search.cpp"
+#include "ulp.cpp"
 #include "rule.cpp"
 
 
-static void print_grid_pretty(const Grid& grid, bool is_solution) {
-    std::string rule = rule::get(false);
-    if (s.multi_rule) {
-        std::string maxrule = rule::get(true);
+static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
+    std::string rule = rule::get(ulp, false);
+    if (ulp.multi_rule) {
+        std::string maxrule = rule::get(ulp, true);
         if (rule != maxrule) {
             printf("#C %s to %s\n", rule.c_str(), maxrule.c_str());
         }
@@ -174,7 +173,7 @@ static Hash min_hash(Hash x, Hash y) {
 //     return out;
 // }
 
-static Hash grid_hash_all_times(const Grid& grid) {
+static Hash hash_all_times(const Grid& grid) {
     Hash out = HASH_OFFSET;
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
@@ -187,14 +186,14 @@ static Hash grid_hash_all_times(const Grid& grid) {
     return out;
 }
 
-static Hash grid_hash_all_times_periodic_with_offset(const Grid& grid, size_t offset, intmax_t dx, intmax_t dy) {
+static Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid, size_t offset, intmax_t dx, intmax_t dy) {
     Hash out = HASH_OFFSET;
     // determine x_offset_0 and y_offset_0
     const auto offsets = grid.extract_gen(offset).get_shrink_to_fit_offsets();
     size_t x_offset_0 = offsets.left;
     size_t y_offset_0 = offsets.top;
-    for (size_t fake_t = 0; fake_t < s.options.periodic_period; fake_t++) {
-        size_t real_t = (fake_t + offset) % s.options.periodic_period;
+    for (size_t fake_t = 0; fake_t < ulp.options.periodic_period; fake_t++) {
+        size_t real_t = (fake_t + offset) % ulp.options.periodic_period;
         const Grid t_grid = grid.extract_gen(real_t);
         const auto offsets = t_grid.get_shrink_to_fit_offsets();
         size_t shrink_width = t_grid.width - offsets.left - offsets.right;
@@ -217,27 +216,27 @@ static Hash grid_hash_all_times_periodic_with_offset(const Grid& grid, size_t of
     return out;
 }
 
-static Hash grid_hash_all_times_periodic(const Grid& grid, size_t dx, size_t dy) {
+static Hash hash_all_times_periodic(const ULP& ulp, const Grid& grid, size_t dx, size_t dy) {
     Hash out = MAX_HASH;
-    for (size_t offset = 0; offset < s.options.periodic_period; offset++) {
-        out = min_hash(out, grid_hash_all_times_periodic_with_offset(grid, offset, dx, dy));
+    for (size_t offset = 0; offset < ulp.options.periodic_period; offset++) {
+        out = min_hash(out, hash_all_times_periodic_with_offset(ulp, grid, offset, dx, dy));
     }
     return out;
 }
 
-static Hash grid_hash_full(const Grid& grid) {
-    StaticSymmetry rule_symmetry = rule::get_static_symmetry();
+static Hash grid_hash_full(const ULP& ulp, const Grid& grid) {
+    StaticSymmetry rule_symmetry = rule::get_static_symmetry(ulp);
     StaticSymmetry grid_symmetry = grid.get_static_symmetry();
     StaticSymmetry symmetry = STATIC_SYMMETRY_MEET[rule_symmetry][grid_symmetry];
     Transformations transforms = static_symmetry_to_transforms(symmetry);
     Hash out;
-    if (s.options.periodic) {
-        intmax_t dx = s.options.periodic_dx;
-        intmax_t dy = s.options.periodic_dy;
-        out = grid_hash_all_times_periodic(grid, dx, dy);
+    if (ulp.options.periodic) {
+        intmax_t dx = ulp.options.periodic_dx;
+        intmax_t dy = ulp.options.periodic_dy;
+        out = hash_all_times_periodic(ulp, grid, dx, dy);
         #define add_hash(transform, dx, dy) \
             if (transforms.transform) { \
-                out = min_hash(out, grid_hash_all_times_periodic(grid.transform(), (dx), (dy))); \
+                out = min_hash(out, hash_all_times_periodic(ulp, grid.transform(), (dx), (dy))); \
             }
         add_hash(flip_horizontal, -dx, dy);
         add_hash(flip_vertical, dx, -dy);
@@ -248,10 +247,10 @@ static Hash grid_hash_full(const Grid& grid) {
         add_hash(flip_anti_diagonal, -dy, -dx);
         #undef add_hash
     } else {
-        out = grid_hash_all_times(grid);
+        out = hash_all_times(grid);
         #define add_hash(transform) \
             if (transforms.transform) { \
-                out = min_hash(out, grid_hash_all_times(grid.transform())); \
+                out = min_hash(out, hash_all_times(grid.transform())); \
             }
         add_hash(flip_horizontal);
         add_hash(flip_vertical);
@@ -266,14 +265,7 @@ static Hash grid_hash_full(const Grid& grid) {
 }
 
 
-static std::unique_ptr<Hash> prev_solution_hashes = nullptr;
-
-void init() {
-    prev_solution_hashes = std::make_unique<Hash>(MAX_SAVED_SOLUTION_HASHES);
-}
-
-
-static bool is_empty(const Grid& grid) {
+static bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
@@ -286,12 +278,12 @@ static bool is_empty(const Grid& grid) {
     return true;
 }
 
-static bool is_subperiod(const Grid& grid) {
-    if (!s.options.periodic) {
+static bool is_subperiod(const ULP& ulp, const Grid& grid) {
+    if (!ulp.options.periodic) {
         return false;
     }
     const Grid gen_0 = grid.extract_gen(0);
-    for (size_t i = 1; i < s.options.periodic_period; i++) {
+    for (size_t i = 1; i < ulp.options.periodic_period; i++) {
         if (gen_0.eq(grid.extract_gen(i))) {
             return true;
         }
@@ -299,39 +291,48 @@ static bool is_subperiod(const Grid& grid) {
     return false;
 }
 
-static void check(bool preprocessing, bool (*check_duplicate)(Grid& grid)) {
+static bool is_duplicate(const ULP& ulp, const Grid& grid) {
+    static std::vector<Hash> prev_hashes;
+    Hash hash = grid_hash_full(ulp, grid);
+    if (std::find(prev_hashes.begin(), prev_hashes.end(), hash) != prev_hashes.end()) {
+        return true;
+    } else {
+        prev_hashes.push_back(hash);
+        return false;
+    }
+}
+
+static void check(ULP& ulp, bool preprocessing) {
     #define drop_solution(msg) \
         debug(2, printf("Dropping solution (" msg ")\n")); \
         if (preprocessing) { \
             printf("Solved in preprocessing, 0 solutions\n"); \
         } \
         return;
-    s.sync_search_grid();
-    Grid hash_grid = s.grid.copy();
-    Grid solution_grid = s.grid.copy();
-    if (is_empty(hash_grid)) {
+    ulp.sync_search_grid();
+    Grid hash_grid = ulp.grid.copy();
+    Grid solution_grid = ulp.grid.copy();
+    if (is_empty(ulp, hash_grid)) {
         drop_solution("empty");
     }
-    if (is_subperiod(hash_grid)) {
+    if (is_subperiod(ulp, hash_grid)) {
         drop_solution("subperiod");
     }
-    if (check_duplicate != nullptr) {
-        if (!check_duplicate(hash_grid)) {
-            drop_solution("duplicate");
-        }
+    if (is_duplicate(ulp, hash_grid)) {
+        drop_solution("duplicate");
     }
     // show the solution
     search_data.solutions_found++;
-    if (s.options.show_solutions) {
+    if (ulp.options.show_solutions) {
         if (preprocessing) {
             printf("Solved in preprocessing, 1 solution:\n");
         } else {
             printf("Solution found:\n");
         }
-        print_grid_pretty(solution_grid, true);
+        print_grid_pretty(ulp, solution_grid, true);
     }
-    if (s.options.max_solutions > 0) {
-        if (search_data.solutions_found >= s.options.max_solutions) {
+    if (ulp.options.max_solutions > 0) {
+        if (search_data.solutions_found >= ulp.options.max_solutions) {
             double time = get_time() - search_data.start_time;
             printf("Search complete, found %zu solution%s in %.6f second%s, %zu branch%s (exited early, max solution count reached)\n", plural(search_data.solutions_found, "s"), plural(time, "s"), plural(search_data.branches, "es"));
             destroy_all();

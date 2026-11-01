@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 #include "../base/base.cpp"
-#include "../base/search.cpp"
+#include "../base/ulp.cpp"
 #include "stack.cpp"
 
 
@@ -64,9 +64,8 @@ static inline void implicstate_and(ImplicState x, const ImplicState y) {
     }
 }
 
-static void init_implicstate_masks(void) {
-    Cell rule_func[1024];
-    s.get_rule_func_cells(rule_func);
+static void init_implicstate_masks(const ULP& ulp) {
+    const Cell* rule_func = ulp.get_rule_func();
     for (int i = 0; i < 1024; i++) {
         if (rule_func[i] == 0) {
             implicstate_set_bit(full_implic_state, i, 0);
@@ -164,11 +163,22 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
     return out;
 }
 
-static void init_implications(void) {
-    init_implicstate_masks();
+static void init_clause_implication_tr(Clause* clause) {
+    clause->implication_pointer = implication_table;
+    for (size_t i = 0; i < clause->var_count; i++) {
+        clause->implication_pointer += clause->vars[i]->value * POWERS_OF_3[i];
+    }
+    debug(4, printf("Transition for clause %zu: %ti\n", clause->number, clause->implication_pointer - implication_table));
+}
+
+static void init_implications(ULP& ulp) {
+    init_implicstate_masks(ulp);
     implication_table = (uint64_t*)safe_malloc(59049 * sizeof(uint64_t));
     for (uint32_t tr = 0; tr < 59049; tr++) {
         implication_table[tr] = get_implications_for_tr(tr);
+    }
+    for (size_t i = 0; i < ulp.graph.clause_count; i++) {
+        init_clause_implication_tr(ulp.graph.clauses[i]);
     }
 }
 
@@ -214,14 +224,6 @@ static void unset_variable(Variable* var) {
     }
     var->value = V_UNKNOWN;
     search_data.set_unknown_cells--;
-}
-
-static void init_clause_implication_tr(Clause* clause) {
-    clause->implication_pointer = implication_table;
-    for (size_t i = 0; i < clause->var_count; i++) {
-        clause->implication_pointer += clause->vars[i]->value * POWERS_OF_3[i];
-    }
-    debug(4, printf("Transition for clause %zu: %ti\n", clause->number, clause->implication_pointer - implication_table));
 }
 
 

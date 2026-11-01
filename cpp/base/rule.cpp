@@ -7,7 +7,7 @@
 #include <string>
 
 #include "base.cpp"
-#include "search.cpp"
+#include "ulp.cpp"
 
 
 namespace rule {
@@ -124,8 +124,8 @@ const INTSpec hex_int = {
     },
 };
 
-static void get_trs_from_clause_funcs(int* trs, int unknown_tr_value) {
-    const Cell* table = s.get_rule_func();
+static void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_value) {
+    const Cell* table = ulp.get_rule_func();
     for (int i = 0; i < 512; i++) {
         int j = (i & 273) | ((i >> 2) & 34) | ((i >> 4) & 4) | ((i << 2) & 136) | ((i << 4) & 64);
         Cell zero = table[(j << 1) | 0];
@@ -302,9 +302,9 @@ static std::string unparse_map(const int* trs) {
     return out;
 }
 
-static std::string get(bool use_maxrule) {
+static std::string get(const ULP& ulp, bool use_maxrule) {
     int trs[512];
-    get_trs_from_clause_funcs(trs, use_maxrule ? 1 : 0);
+    get_trs_from_clause_funcs(ulp, trs, use_maxrule ? 1 : 0);
     std::string out;
     // INT
     auto int_str = get_int_spec_rule(trs, &normal_int);
@@ -320,15 +320,15 @@ static std::string get(bool use_maxrule) {
             out = unparse_map(trs);
         }
     }
-    if (s.options.after_rule_text != nullptr) {
-        out += s.options.after_rule_text;
+    if (ulp.options.after_rule_text != nullptr) {
+        out += ulp.options.after_rule_text;
     }
     return out;
 }
 
 
-static Transformations get_identity_transforms() {
-    const Cell* func = s.get_rule_func();
+static Transformations get_identity_transforms(const ULP& ulp) {
+    const Cell* func = ulp.get_rule_func();
     Transformations out;
     // rotation symmetries
     bool C2 = true;
@@ -380,8 +380,8 @@ static Transformations get_identity_transforms() {
     return out;
 }
 
-static StaticSymmetry get_static_symmetry() {
-    return transforms_to_static_symmetry(get_identity_transforms());
+static StaticSymmetry get_static_symmetry(const ULP& ulp) {
+    return transforms_to_static_symmetry(get_identity_transforms(ulp));
 }
 
 
