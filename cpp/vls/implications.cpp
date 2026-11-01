@@ -16,7 +16,7 @@
 namespace vls {
 
 
-static Search current_search;
+static Search search;
 
 
 typedef uint64_t ImplicState[16];
@@ -209,7 +209,7 @@ static bool set_variable(Variable* var, VarValue value) {
             data->clause->implication_pointer += data->change * 2;
         }
     }
-    current_search.set_unknown_cells++;
+    search.set_unknown_cells++;
     return true;
 }
 
@@ -227,7 +227,7 @@ static void unset_variable(Variable* var) {
         }
     }
     var->value = V_UNKNOWN;
-    current_search.set_unknown_cells--;
+    search.set_unknown_cells--;
 }
 
 
