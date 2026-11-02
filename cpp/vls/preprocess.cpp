@@ -9,6 +9,7 @@
 #include "../base/params.cpp"
 #include "../base/base.cpp"
 #include "../base/ulp.cpp"
+#include "../base/rule.cpp"
 #include "stack.cpp"
 #include "implications.cpp"
 
@@ -372,17 +373,11 @@ private:
         // also looks for clauses where they are the same except for the next value
         // which means that the next cells can be aliased together!
         // when this happens the next pass will take care of merging the clauses
-        Transformations valid = get_rule_identity_transforms();
-        for (size_t i = 0; i < state.clause_count; i++) {
-            Clause* x = &(state.clauses[i]);
-            if (x->removed) {
-                continue;
-            }
+        Transformations valid = rule::get_identity_transforms();
+        for (size_t i = 0; i < ulp.clause_count; i++) {
+            Clause& x = *ulp.clauses[i];
             for (size_t j = 0; j < i; j++) {
-                Clause* y = &(state.clauses[j]);
-                if (y->removed) {
-                    continue;
-                }
+                Clause& y = *ulp.clauses[j];
                 Clause y2;
                 // no transformation
                 clause_copy(&y2, y);
