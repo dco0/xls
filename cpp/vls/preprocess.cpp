@@ -10,6 +10,7 @@
 #include "../base/base.cpp"
 #include "../base/ulp.cpp"
 #include "../base/rule.cpp"
+#include "../base/solutions.cpp"
 #include "stack.cpp"
 #include "implications.cpp"
 
@@ -21,6 +22,7 @@ class PreClause {
 
 public:
 
+    Clause& real_clause;
     Variable* nw;
     Variable* n;
     Variable* ne;
@@ -32,19 +34,7 @@ public:
     Variable* se;
     Variable* next;
 
-    PreClause() {
-        this->nw = nullptr;
-        this->n = nullptr;
-        this->ne = nullptr;
-        this->w = nullptr;
-        this->c = nullptr;
-        this->e = nullptr;
-        this->sw = nullptr;
-        this->s = nullptr;
-        this->se = nullptr;
-    }
-
-    PreClause(Clause& clause) {
+    PreClause(Clause& clause) : real_clause(clause) {
         if (clause.var_count != 10) {
             error("Creation of PreClause with clause whose variable count is not 10 (it is %zu)", clause.var_count);
         }
@@ -60,7 +50,7 @@ public:
         nw = clause.vars[9];
     }
 
-    PreClause(Variable* nw, Variable* n, Variable* ne, Variable* w, Variable* c, Variable* e, Variable* sw, Variable* s, Variable* se, Variable* next) {
+    PreClause(Clause& clause, Variable* nw, Variable* n, Variable* ne, Variable* w, Variable* c, Variable* e, Variable* sw, Variable* s, Variable* se, Variable* next) : real_clause(clause) {
         this->nw = nw;
         this->n = n;
         this->ne = ne;
@@ -73,7 +63,7 @@ public:
         this->next = next;
     }
 
-    PreClause(PreClause& clause) {
+    PreClause(const PreClause& clause) : real_clause(clause.real_clause) {
         this->nw = clause.nw;
         this->n = clause.n;
         this->ne = clause.ne;
@@ -86,7 +76,23 @@ public:
         this->next = clause.next;
     }
 
-    bool operator==(const PreClause&) const = default;
+    size_t get_number() {
+        return real_clause.number;
+    }
+
+    bool operator==(const PreClause& other) const {
+        return nw == other.nw
+            && n == other.n
+            && ne == other.ne
+            && w == other.w
+            && c == other.c
+            && e == other.e
+            && sw == other.sw
+            && s == other.s
+            && se == other.se
+            && next == other.next
+        ;
+    }
 
     template<auto Member> 
     bool eq_except_for(const PreClause& other) const {
@@ -107,8 +113,8 @@ public:
     }
 
     #define create_clause_transformer(name, map_nw, map_n, map_ne, map_w, map_c, map_e, map_sw, map_s, map_se, map_next) \
-        PreClause name() { \
-            PreClause out; \
+        PreClause name() const { \
+            PreClause out = PreClause(real_clause); \
             out.map_nw = nw; \
             out.map_n = n; \
             out.map_ne = ne; \
@@ -119,7 +125,7 @@ public:
             out.map_s = s; \
             out.map_se = se; \
             out.map_next = next; \
-            return PreClause(); \
+            return out; \
         }
     create_clause_transformer(flip_horizontal, ne, n, nw, e, c, w, se, s, sw, next)
     create_clause_transformer(flip_vertical, sw, s, se, w, c, e, nw, n, ne, next)
@@ -268,7 +274,8 @@ private:
     }
 
     void normalize() {
-
+        normalize_cells();
+        normalize_clauses();
     }
 
     bool internal_check_implications(Variable& var, VarValue value) {
@@ -373,34 +380,32 @@ private:
         // also looks for clauses where they are the same except for the next value
         // which means that the next cells can be aliased together!
         // when this happens the next pass will take care of merging the clauses
-        Transformations valid = rule::get_identity_transforms();
+        Transformations valid = rule::get_identity_transforms(ulp);
         for (size_t i = 0; i < ulp.clause_count; i++) {
-            Clause& x = *ulp.clauses[i];
+            PreClause x = PreClause(*ulp.clauses[i]);
             for (size_t j = 0; j < i; j++) {
-                Clause& y = *ulp.clauses[j];
-                Clause y2;
+                PreClause y = PreClause(*ulp.clauses[j]);
                 // no transformation
-                clause_copy(&y2, y);
-                if (clause_eq(x, &y2)) {
-                    debug(2, printf("Match found: clause %zu is equal to clause %zu with no transformation\n", x->number, y->number));
-                    remove_clause(y);
+                if (x == y) {
+                    debug(2, printf("Match found: clause %zu is equal to clause %zu with no transformation\n", x.get_number(), y.get_number()));
+                    remove_clause(y.real_clause);
                     continue;
-                } else if (clause_eq_except_for_next(x, &y2)) {
-                    debug(2, printf("Match found: clause %zu has same next as clause %zu with no transformation\n", x->number, y->number));
-                    alias_cell(x->next, y->next);
+                } else if (x.eq_except_for<&PreClause::next>(y)) {
+                    debug(2, printf("Match found: clause %zu has same next as clause %zu with no transformation\n", x.get_number(), y.get_number()));
+                    alias_variable(*x.next, *y.next);
                     continue;
                 }
                 // macro for the rest of the transformations
-                #define check(name) \
-                    if (valid.name) { \
-                        clause_##name(&y2, y); \
-                        if (clause_eq(x, &y2)) { \
-                            debug(2, printf("Match found: clause %zu is equal to clause %zu with transformation "#name"\n", x->number, y->number)); \
-                            remove_clause(y); \
+                #define check(transform) \
+                    if (valid.transform) { \
+                        PreClause y2 = y.transform(); \
+                        if (x == y2) { \
+                            debug(2, printf("Match found: clause %zu is equal to clause %zu with transformation "#transform"\n", x.get_number(), y2.get_number())); \
+                            remove_clause(y2.real_clause); \
                             continue; \
-                        } else if (clause_eq_except_for_next(x, &y2)) { \
-                            debug(2, printf("Match found: clause %zu has same next as clause %zu with transformation "#name"\n", x->number, y->number)); \
-                            alias_cell(x->next, y->next); \
+                        } else if (x.eq_except_for<&PreClause::next>(y2)) { \
+                            debug(2, printf("Match found: clause %zu has same next as clause %zu with transformation "#transform"\n", x.get_number(), y2.get_number())); \
+                            alias_variable(*x.next, *y2.next); \
                             continue; \
                         } \
                     }
@@ -432,20 +437,15 @@ public:
             debug(2, printf("Running preprocessing iteration %zu\n", i));
             changes_made = false;
             inc_debug_depth();
-            normalize_cells();
-            normalize_clauses();
+            normalize();
             check_variable_implications();
-            normalize_cells();
-            normalize_clauses();
+            normalize();
             alias_duplicate_variables();
-            normalize_cells();
-            normalize_clauses();
+            normalize();
             remove_known_clauses();
-            normalize_cells();
-            normalize_clauses();
+            normalize();
             merge_duplicate_or_similar_clauses();
-            normalize_cells();
-            normalize_clauses();
+            normalize();
             dec_debug_depth();
             if (!changes_made) {
                 found = true;
@@ -455,26 +455,19 @@ public:
         if (!found) {
             unexpected_error("Preprocessing did not finish");
         }
-        if (state.var_count == 0) {
-            check_solution(true);
+        if (ulp.var_count == 0) {
+            solutions::check(*search, true);
             return true;
         }
         // move back the stack pointer to save space
         current_stack.len = 0;
-        size_t real_clause_count = 0;
-        for (size_t i = 0; i < state.clause_count; i++) {
-            if (!state.clauses[i].removed) {
-                real_clause_count++;
-            }
-        }
-        printf("Preprocessing complete: %zu variables, %zu clauses\n", state.var_count, real_clause_count);
         return false;
     }
 
-}
+};
 
 static void preprocess() {
-    Preprocessor value = Preprocessor(search.ulp);
+    Preprocessor value = Preprocessor(search->ulp);
     value.preprocess();
 }
 

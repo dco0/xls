@@ -38,4 +38,5 @@ int main(int argc, [[maybe_unused]] char** argv) {
     vls::init_implications(ulp);
     vls::search = &search;
     vls::preprocess();
+    printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
 }
