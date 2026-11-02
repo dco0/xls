@@ -104,7 +104,7 @@ constexpr Cell C_ON = 1;
 }
 
 typedef uint8_t VarValue;
-VarValue V_UNKNOWN = 0;
+constexpr const VarValue V_UNKNOWN = 0;
 
 [[gnu::always_inline]] static inline VarValue cell_to_varvalue(Cell cell) {
     return (VarValue)(cell + 1);
@@ -147,7 +147,6 @@ struct Variable {
 
 struct Clause {
     size_t number;
-    bool removed;
     ClauseFunc* func;
     // for VLS backend trust me it needs it for the preprocessor too
     uint64_t* implication_pointer;

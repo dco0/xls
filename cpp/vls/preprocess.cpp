@@ -3,9 +3,14 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
 
+#include "../base/params.cpp"
 #include "../base/base.cpp"
 #include "../base/ulp.cpp"
+#include "stack.cpp"
+#include "implications.cpp"
 
 
 namespace vls {
@@ -143,8 +148,12 @@ private:
 
     const char* current_step;
 
-    [[noreturn]] void contradiction() {
+    [[noreturn]] void contradiction(const char* format, ...) {
         printf("Contradiction found in preprocessing (in step %s)\n", current_step);
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
         exit(EXIT_SUCCESS);
     }
 
@@ -184,9 +193,6 @@ private:
         }
         for (size_t i = 0; i < ulp.clause_count; i++) {
             Clause& clause = *ulp.clauses[i];
-            if (clause.removed) {
-                continue;
-            }
             for (size_t i = 0; i < clause.var_count; i++) {
                 if (clause.vars[i] == &var || clause.vars[i] == &alias_to) {
                     clause.vars[i] = new_var;
@@ -223,17 +229,22 @@ private:
                 }
             }
         }
-        clause.removed = true;
+        for (size_t i = clause.number; i <= ulp.clause_count - 1; i++) {
+            ulp.clauses[i] = ulp.clauses[i + 1];
+            ulp.clauses[i]->number--;
+        }
+        ulp.clause_count--;
+        safe_free(&clause);
     }
 
-    void normalize_cells(void) {
+    void normalize_cells() {
         start_step();
         // runs several normalization steps
         for (size_t i = 1; i <= ulp.var_count; i++) {
             Variable& var = *ulp.vars[i];
             // if the cell has a known value then set it to the corresponding cell
             if (var.value != V_UNKNOWN) {
-                alias_variable(var, &ulp.vars[varvalue_to_cell(var.value)]);
+                alias_variable(var, *ulp.vars[varvalue_to_cell(var.value)]);
                 continue;
             }
             // see if we can combine together any uses
@@ -249,39 +260,49 @@ private:
         end_step();
     }
 
+    void normalize_clauses() {
+        start_step();
+        // unsure what this is yet
+        end_step();
+    }
+
+    void normalize() {
+
+    }
+
     bool internal_check_implications(Variable& var, VarValue value) {
         debug(2, printf("Checking implications for variable %zu = %i\n", var.number, value));
         inc_debug_depth();
         current_stack.push_frame();
         bool out = set_variable_and_propagate(var, value, true);
-        current_stack.pop_frame();
+        current_stack.pop_and_undo_frame();
         dec_debug_depth();
         return out;
     }
 
-    void check_var_implications(void) {
+    void check_variable_implications() {
         start_step();
         // go through each cell and try setting it to a value
         // if it's a contradiction, then it must be the OTHER value
         // so we can set it to that!
         for (size_t i = 1; i <= ulp.var_count; i++) {
-            Variable& var = &ulp.vars[i];
-            if (var.value != UNKNOWN) {
+            Variable& var = *ulp.vars[i];
+            if (var.value != V_UNKNOWN) {
                 continue;
             }
-            bool can_be_0 = internal_check_implications(var, OFF);
-            bool can_be_1 = internal_check_implications(var, ON);
+            bool can_be_0 = internal_check_implications(var, cell_to_varvalue(0));
+            bool can_be_1 = internal_check_implications(var, cell_to_varvalue(1));
             debug(2, printf("Implications for variable %zu: can_be_0 = %i, can_be_1 = %i\n", var.number, can_be_0, can_be_1));
             if (!can_be_0 && !can_be_1) {
-                contradiction();
+                contradiction("Variable %zu is unsettable", var.value);
             } else if (!can_be_0 && can_be_1) {
                 changes_made = true;
-                set_variable_and_propagate(var, ON, true);
+                set_variable_and_propagate(var, cell_to_varvalue(0), true);
                 // reset the stack length to fix dangling pointers caused by set_variable and save space
                 current_stack.len = 0;
             } else if (can_be_0 && !can_be_1) {
                 changes_made = true;
-                set_variable_and_propagate(cell, OFF, true);
+                set_variable_and_propagate(var, cell_to_varvalue(0), true);
                 // reset the stack length to fix dangling pointers caused by set_variable and save space
                 current_stack.len = 0;
             } else {
@@ -291,70 +312,61 @@ private:
         end_step();
     }
 
-    void alias_duplicate_cells(void) {
+    void alias_duplicate_variables() {
         start_step();
         // if 2 variables have exactly the same arrangement of clauses
         // then alias them together
-        for (size_t i = 1; i <= state.var_count; i++) {
-            Cell* x = state.vars[i];
+        for (size_t i = 1; i <= ulp.var_count; i++) {
+            Variable& x = *ulp.vars[i];
             for (size_t j = 1; j < i; j++) {
-                Cell* y = state.vars[j];
-                if (x->use_count != y->use_count) {
+                Variable& y = *ulp.vars[j];
+                if (x.use_count != y.use_count) {
                     continue;
                 }
                 bool found = false;
-                for (size_t k = 0; k < x->use_count; k++) {
-                    CellUseData* x_data = &(x->uses[k]);
-                    CellUseData* y_data = &(y->uses[k]);
-                    if (!(true
-                        && x_data->c == y_data->c
-                        && x_data->prev == y_data->prev
-                        && x_data->nw == y_data->nw
-                        && x_data->n == y_data->n
-                        && x_data->ne == y_data->ne
-                        && x_data->w == y_data->w
-                        && x_data->e == y_data->e
-                        && x_data->sw == y_data->sw
-                        && x_data->s == y_data->s
-                        && x_data->se == y_data->se
-                    )) {
+                for (size_t k = 0; k < x.use_count; k++) {
+                    VarUse& x_use = x.uses[k];
+                    VarUse& y_use = y.uses[k];
+                    if (!(x_use.clause == y_use.clause && x_use.change == y_use.change)) {
                         found = true;
                         break;
                     }
                 }
                 if (!found) {
-                    alias_cell(x, y);
+                    alias_variable(x, y);
                 }
             }
         }
         end_step();
     }
 
-
-    void normalize_clauses(void) {
-        start_step();
-        // so what this is gonna do is
-        // reorder the cells inside clauses to keep the implication trs
-        // closer to 0
-        end_step();
-    }
-
-    void remove_known_clauses(void) {
+    void remove_known_clauses() {
         start_step();
         // removes all clauses that are fully made of known cells
-        for (size_t i = 0; i < state.clause_count; i++) {
-            Clause* clause = &(state.clauses[i]);
-            if (clause->removed) {
-                continue;
+        for (size_t i = 0; i < ulp.clause_count; i++) {
+            Clause& clause = *ulp.clauses[i];
+            bool found = false;
+            for (size_t j = 0; j < clause.var_count; j++) {
+                if (clause.vars[j]->value == V_UNKNOWN) {
+                    found = true;
+                    break;
+                }
             }
-            if (clause->nw->value != UNKNOWN && clause->n->value != UNKNOWN && clause->ne->value != UNKNOWN && clause->w->value != UNKNOWN && clause->c->value != UNKNOWN && clause->e->value != UNKNOWN && clause->sw->value != UNKNOWN && clause->s->value != UNKNOWN && clause->se->value != UNKNOWN && clause->next->value != UNKNOWN) {
-                remove_clause(clause);
+            if (!found) {
+                current_stack.push_frame();
+                bool value = check_clause_implications(clause);
+                current_stack.pop_and_undo_frame();
+                if (value == false) {
+                    contradiction("Clause %zu is UNSAT immediately", i);
+                } else {
+                    remove_clause(clause);
+                }
             }
         }
         end_step();
     }
 
-    void merge_duplicate_or_similar_clauses(void) {
+    void merge_duplicate_or_similar_clauses() {
         start_step();
         // looks for clauses that are exactly the same and merges them
         // also looks for clauses where they are the same except for the next value
@@ -416,7 +428,7 @@ private:
 public:
 
     // returns whether it was solved in preprocessing
-    bool preprocess(void) {
+    bool preprocess() {
         debug(2,
             printf("Preprocessing\n");
         );
@@ -427,10 +439,10 @@ public:
             inc_debug_depth();
             normalize_cells();
             normalize_clauses();
-            check_cell_implications();
+            check_variable_implications();
             normalize_cells();
             normalize_clauses();
-            alias_duplicate_cells();
+            alias_duplicate_variables();
             normalize_cells();
             normalize_clauses();
             remove_known_clauses();

@@ -122,8 +122,22 @@ public:
     void push_frame() {
         is_at_top_of_frame = true;
     }
-    
+
     void pop_frame() {
+        if (is_at_top_of_frame) {
+            return;
+        } else {
+            while (len > 0) {
+                bool done = get_entry(len - 1).is_first_in_frame;
+                pop();
+                if (done) {
+                    break;
+                }
+            }
+        }
+    }
+    
+    void pop_and_undo_frame() {
         debug(4, printf("Popping frame\n"));
         if (is_at_top_of_frame) {
             debug(4, printf("Stack holds 0-length frame at top, doing nothing\n"));

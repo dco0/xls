@@ -390,7 +390,6 @@ private:
                 }
                 Clause* clause = (Clause*)safe_malloc(sizeof(Clause) + var_count * sizeof(Variable*));
                 clause->number = i;
-                clause->removed = false;
                 clause->func = func;
                 clause->implication_pointer = nullptr;
                 clause->var_count = var_count;

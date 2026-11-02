@@ -22,7 +22,7 @@ namespace cnf::cf {
             }
         }
         size_t vars() const {
-            return cf->vars;
+            return cf->var_count;
         }
         size_t bits_per_var() const {
             return 2;
@@ -32,7 +32,7 @@ namespace cnf::cf {
         }
         std::vector<std::vector<lit>> enforce_constraint(const std::vector<std::vector<lit>>& cells) const {
             if (!cached) {
-                cache = make_primes(cf->vars, cf->data.lookup_table.table);
+                cache = make_primes(cf->var_count, cf->data.lookup_table.table);
                 cached = true;
             }
             std::vector<lit> flatcells(cells.size());

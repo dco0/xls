@@ -184,7 +184,7 @@ static void init_implications(ULP& ulp) {
     }
 }
 
-static void destroy_implications(void) {
+static void destroy_implications() {
     safe_free(implication_table);
 }
 
