@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <unordered_map>
 
-#include "params.hpp"
+#include "params.cpp"
 #include "base.cpp"
 
 

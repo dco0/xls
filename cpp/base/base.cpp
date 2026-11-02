@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "params.hpp"
+#include "params.cpp"
 
 
 // debugging
@@ -93,6 +93,8 @@ static void safe_free(void* ptr) {
 
 // core type definitions
 
+constexpr const ptrdiff_t POWERS_OF_3[16] = {1Z, 3Z, 9Z, 27Z, 81Z, 243Z, 729Z, 2187Z, 6561Z, 19683Z, 59049Z, 177147Z, 531441Z, 1594323Z, 4782969Z, 14348907Z};
+
 typedef size_t Cell;
 constexpr Cell C_OFF = 0;
 constexpr Cell C_ON = 1;
@@ -101,11 +103,8 @@ constexpr Cell C_ON = 1;
     return cell > 1;
 }
 
-enum VarValue : uint8_t {
-    V_UNKNOWN = 0,
-    V_OFF = 1,
-    V_ON = 2,
-};
+typedef uint8_t VarValue;
+VarValue V_UNKNOWN = 0;
 
 [[gnu::always_inline]] static inline VarValue cell_to_varvalue(Cell cell) {
     return (VarValue)(cell + 1);
@@ -124,7 +123,7 @@ enum class ClauseFuncType : uint8_t {
 };
 
 struct ClauseFunc {
-    size_t vars;
+    size_t var_count;
     ClauseFuncType type;
     union {
         LookupTableClauseFunc lookup_table;
@@ -154,18 +153,6 @@ struct Clause {
     uint64_t* implication_pointer;
     size_t var_count;
     Variable* vars[];
-};
-
-Variable off_var = {
-    .number = 0,
-    .value = V_OFF,
-    .use_count = 0,
-};
-
-Variable on_var = {
-    .number = 0,
-    .value = V_ON,
-    .use_count = 0,
 };
 
 

@@ -7,10 +7,13 @@
 #include "base/ulp.cpp"
 #include "base/search.cpp"
 #include "vls/implications.cpp"
+#include "vls/preprocess.cpp"
 
 
 int main(int argc, [[maybe_unused]] char** argv) {
-    Search search;
+    calibrate_time();
+    // mark as static so destructor is called on exit()
+    static Search search;
     ULP& ulp = search.ulp;
     errno = 0;
     #if IN_BROWSER
@@ -31,7 +34,8 @@ int main(int argc, [[maybe_unused]] char** argv) {
     ULPParser parser = ULPParser(ulp, file);
     parser.parse();
     fclose(file);
-    printf("Loaded search: %zu variables, %zu clauses\n", ulp.graph.var_count, ulp.graph.clause_count);
+    printf("Loaded search: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
     vls::init_implications(ulp);
-    vls::current_search = search;
+    vls::search = &search;
+    vls::preprocess();
 }

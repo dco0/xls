@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <optional>
+#include <map>
 
 #include "base.cpp"
 #include "grid.cpp"
@@ -22,35 +23,61 @@ struct ULP {
 
     uint64_t max_states = 0;
 
-    struct {
-        size_t var_count = 0;
-        Variable** vars = nullptr;
-        size_t func_count = 0;
-        ClauseFunc** funcs = nullptr;
-        size_t rule_func_index = 0;
-        size_t clause_count = 0;
-        Clause** clauses = nullptr;
-    } graph;
+    size_t var_count = 0;
+    Variable** vars = nullptr;
+
+    size_t func_count = 0;
+    ClauseFunc** funcs = nullptr;
+    size_t rule_func_index = 0;
+
+    size_t clause_count = 0;
+    Clause** clauses = nullptr;
 
     Grid grid = Grid(0, 0, 0);
 
-    struct {
+    struct Options {
 
         bool periodic = false;
         uintmax_t periodic_dx = 0;
         uintmax_t periodic_dy = 0;
         uintmax_t periodic_period = 0;
 
-        const char* after_rule_text = NULL;
+        char* after_rule_text = nullptr;
 
         bool show_solutions = true;
         std::optional<uintmax_t> max_solutions = std::nullopt;
 
-    } options;
+    };
+
+    Options options;
+
+    ~ULP() {
+        if (vars != nullptr) {
+            for (size_t i = 0; i < var_count; i++) {
+                safe_free(vars[i]);
+            }
+            safe_free(vars);
+        }
+        if (funcs != nullptr) {
+            for (size_t i = 0; i < func_count; i++) {
+                safe_free(funcs[i]);
+            }
+            safe_free(funcs);
+        }
+        if (clauses != nullptr) {
+            for (size_t i = 0; i < clause_count; i++) {
+                safe_free(clauses[i]);
+            }
+            safe_free(clauses);
+        }
+        if (options.after_rule_text != nullptr) {
+            safe_free(options.after_rule_text);
+        }
+    }
 
     const Cell* get_rule_func() const {
-        ClauseFunc* func = graph.funcs[graph.rule_func_index];
-        if (func->vars != 10) {
+        ClauseFunc* func = funcs[rule_func_index];
+        if (func->var_count != 10) {
             error("Rule function must have 10 inputs");
         }
         if (func->type != ClauseFuncType::LOOKUP_TABLE) {
@@ -65,7 +92,7 @@ struct ULP {
                 for (size_t x = 0; x < grid.width; x++) {
                     Cell value = grid.get(t, x, y);
                     if (c_is_var(value)) {
-                        Variable* var = graph.vars[value];
+                        Variable* var = vars[value];
                         if (var->value != V_UNKNOWN) {
                             grid.set(t, x, y, varvalue_to_cell(var->value));
                         }
@@ -93,32 +120,39 @@ public:
 
 private:
 
-    inline void check_ferror() {
+    void check_ferror() {
         if (ferror(file)) {
             fclose(file);
             error("Could not read ULP (possibly corrupted)");
         }
     }
 
-    int ulp_error_line = 1;
-
-    void _ulp_error(const char* format, ...) {
-        long error_pos = ftell(file);
-        if (error_pos == -1) {
+    long e_ftell() {
+        long out = ftell(file);
+        if (out == -1L) {
             fclose(file);
             error("ftell() failed while parsing ULP: %s", strerror(errno));
         }
-        if (fseek(file, 0, SEEK_SET) != 0) {
+        return out;
+    }
+
+    void e_fseek(long offset, int whence) {
+        int failed = fseek(file, offset, whence);
+        if (failed != 0) {
             fclose(file);
             error("fseek() failed while parsing ULP: %s", strerror(errno));
         }
+    }
+
+    int ulp_error_line = 1;
+
+    void _ulp_error(const char* format, ...) {
+        long error_pos = e_ftell();
+        e_fseek(0, SEEK_SET);
         ulp_error_line = 1;
         while (true) {
-            long current_pos = ftell(file);
-            if (current_pos == -1) {
-                fclose(file);
-                error("ftell() failed while parsing ULP: %s", strerror(errno));
-            } else if (current_pos >= error_pos) {
+            long current_pos = e_ftell();
+            if (current_pos >= error_pos) {
                 break;
             }
             int c = fgetc(file);
@@ -138,7 +172,7 @@ private:
 
     #define ulp_error(format, ...) _ulp_error("Invalid ULP (near line %i): " format, ulp_error_line __VA_OPT__(,) __VA_ARGS__)
 
-    inline int get_format_arg_count(const char* format) {
+    int get_format_arg_count(const char* format) {
         int out = 0;
         for (size_t i = 0; format[i] != '\0'; i++) {
             if (format[i] == '%') {
@@ -159,11 +193,7 @@ private:
     int check_count = 0;
 
     [[gnu::format(scanf, 2, 3)]] bool _check(const char* format, ...) {
-        long start_pos = ftell(file);
-        if (start_pos == -1) {
-            fclose(file);
-            error("ftell() failed while parsing ULP: %s", strerror(errno));
-        }
+        long start_pos = e_ftell();
         // run vfscanf
         va_list args;
         va_start(args, format);
@@ -171,10 +201,7 @@ private:
         va_end(args);
         if (value == EOF) {
             check_ferror();
-            if (fseek(file, start_pos, SEEK_SET) != 0) {
-                fclose(file);
-                error("fseek() failed while parsing ULP: %s", strerror(errno));
-            }
+            e_fseek(start_pos, SEEK_SET);
             return false;
         }
         int count = get_format_arg_count(format);
@@ -189,22 +216,15 @@ private:
                 return true;
             }
         } else {
-            if (fseek(file, start_pos, SEEK_SET) != 0) {
-                fclose(file);
-                error("fseek() failed while parsing ULP: %s", strerror(errno));
-            }
+            e_fseek(start_pos, SEEK_SET);
             return false;
         }
     }
 
     #define check(format, ...) _check(format "%n" __VA_OPT__(,) __VA_ARGS__ , &check_count)
 
-    [[gnu::format(scanf, 2, 3)]] bool parse_line(const char* format, ...) {
-        long start_pos = ftell(file);
-        if (start_pos == -1) {
-            fclose(file);
-            error("Could not read ULP (ftell returned -1)");
-        }
+    [[gnu::format(scanf, 2, 3)]] bool check_line(const char* format, ...) {
+        long start_pos = e_ftell();
         // run vfscanf
         va_list args;
         va_start(args, format);
@@ -212,10 +232,7 @@ private:
         va_end(args);
         if (value == EOF) {
             check_ferror();
-            if (fseek(file, start_pos, SEEK_SET) != 0) {
-                fclose(file);
-                error("fseek() failed while parsing ULP: %s", strerror(errno));
-            }
+            e_fseek(start_pos, SEEK_SET);
             return false;
         }
         // printf("Testing '%s': %i out of %i\n", format, value, format_args);
@@ -243,17 +260,11 @@ private:
             if (found) {
                 return true;
             } else {
-                if (fseek(file, start_pos, SEEK_SET) != 0) {
-                    fclose(file);
-                    error("fseek() failed while parsing ULP: %s", strerror(errno));
-                }
+                e_fseek(start_pos, SEEK_SET);
                 return false;
             }
         } else {
-            if (fseek(file, start_pos, SEEK_SET) != 0) {
-                fclose(file);
-                error("fseek() failed while parsing ULP: %s", strerror(errno));
-            }
+            e_fseek(start_pos, SEEK_SET);
             return false;
         }
     }
@@ -277,35 +288,35 @@ private:
         return true;
     }
 
-    bool parse_graph_line() {
-        if (!eat_whitespace()) {
-            return false;
-        }
+    void parse_graph_line() {
         size_t v_size;
-        if (parse_line("var_count = %zu", &v_size)) {
-            out.graph.var_count = v_size;
-            // TODO: MAYBE THE SIZE IS ALREADY INCREMENTED BY 2???
-            static_cast<const int>(1);
-            size_t len = v_size + 2;
+        if (check_line("var_count = %zu", &v_size)) {
+            out.var_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.graph.vars = (Variable**)safe_realloc(out.graph.vars, v_size * sizeof(Variable*));
-        } else if (parse_line("funcs : %zu", &v_size)) {
-            if (out.graph.vars == nullptr) {
+            out.vars = (Variable**)safe_realloc(out.vars, v_size * sizeof(Variable*));
+            // fill in the implicit vars
+            for (size_t i = 0; i < out.max_states; i++) {
+                Variable* var = (Variable*)safe_malloc(sizeof(Variable));
+                out.vars[i] = var;
+                var->number = i;
+            }
+        } else if (check_line("funcs : %zu", &v_size)) {
+            if (out.vars == nullptr) {
                 ulp_error("funcs provided before var_count");
             }
-            out.graph.func_count = v_size;
+            out.func_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.graph.funcs = (ClauseFunc**)safe_realloc(out.graph.funcs, v_size * sizeof(ClauseFunc*));
+            out.funcs = (ClauseFunc**)safe_realloc(out.funcs, v_size * sizeof(ClauseFunc*));
             for (size_t i = 0; i < v_size; i++) {
-                size_t vars;
-                if (!check(" %zu", &vars)) {
+                size_t var_count;
+                if (!check(" %zu", &var_count)) {
                     ulp_error("No variable count provided for clause func %zu", i);
                 }
                 if (check(" lookup_table")) {
-                    size_t len = 1UZ << vars;
+                    size_t len = 1UZ << var_count;
                     ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(Cell));
                     func->type = ClauseFuncType::LOOKUP_TABLE;
-                    func->vars = vars;
+                    func->var_count = var_count;
                     for (size_t i = 0; i < len; i++) {
                         Cell value;
                         if (!check(" %zu", &value)) {
@@ -316,21 +327,150 @@ private:
                 } else {
                     ulp_error("Invalid type for clause func %zu", i);
                 }
+                if (!check_line("")) {
+                    ulp_error("Extra non-whitespace characters at end of clause func");
+                }
+            }
+        } else if (check_line("rule_func_index = %zu", &v_size)) {
+            out.rule_func_index = v_size;
+        } else if (check_line("clauses : %zu", &v_size)) {
+            if (out.vars == nullptr) {
+                ulp_error("clauses provided before var_count");
+            }
+            // determine variable use counts first
+            long start = e_ftell();
+            std::map<size_t, size_t> use_counts;
+            for (size_t i = 0; i < v_size; i++) {
+                size_t func_number;
+                if (!check(" %zu", &func_number)) {
+                    ulp_error("No func number provided for clause %zu", i);
+                }
+                size_t vars;
+                if (!check(" %zu", &vars)) {
+                    ulp_error("No variable count provided for clause %zu", i);
+                }
+                for (size_t j = 0; j < vars; j++) {
+                    size_t value;
+                    if (!check(" %zu", &value)) {
+                        ulp_error("Variable %zu missing for clause %zu", j, i);
+                    }
+                    // fine because it will initialize it to 0 if it doesn't exist
+                    use_counts[value]++;
+                }
+                if (!check_line("")) {
+                    ulp_error("Extra non-whitespace characters at end of clause func");
+                }
+            }
+            e_fseek(start, SEEK_SET);
+            // now allocate the variables
+            for (size_t i = out.max_states; i < out.var_count; i++) {
+                Variable* var = (Variable*)safe_malloc(sizeof(Variable) + use_counts[i] * sizeof(VarUse));
+                var->number = i;
+                var->value = V_UNKNOWN;
+                // set it to 0 so the next part can increment it to track how many have been assigned
+                var->use_count = 0;
+                out.vars[i] = var;
+            }
+            // finally, do the clauses
+            out.clause_count = v_size;
+            // realloc behaves like malloc for null pointers
+            out.clauses = (Clause**)safe_realloc(out.clauses, v_size * sizeof(Clause*));
+            for (size_t i = 0; i < out.clause_count; i++) {
+                size_t func_number;
+                if (!check(" %zu", &func_number)) {
+                    ulp_error("No func number provided for clause %zu", i);
+                }
+                if (func_number >= out.func_count) {
+                    ulp_error("Invalid func number provided for clause %zu: %zu", i, func_number);
+                }
+                ClauseFunc* func = out.funcs[func_number];
+                size_t var_count;
+                if (!check(" %zu", &var_count)) {
+                    ulp_error("No variable count provided for clause %zu", i);
+                }
+                Clause* clause = (Clause*)safe_malloc(sizeof(Clause) + var_count * sizeof(Variable*));
+                clause->number = i;
+                clause->removed = false;
+                clause->func = func;
+                clause->implication_pointer = nullptr;
+                clause->var_count = var_count;
+                for (size_t j = 0; j < var_count; j++) {
+                    size_t var_number;
+                    if (!check(" %zu", &var_number)) {
+                        ulp_error("Variable %zu missing for clause %zu", j, i);
+                    }
+                    Variable* var = out.vars[var_number];
+                    clause->vars[i] = var;
+                    VarUse& use = var->uses[var->use_count];
+                    use.clause = clause;
+                    use.change = POWERS_OF_3[j];
+                    var->use_count++;
+                }
+                if (!check_line("")) {
+                    ulp_error("Extra non-whitespace characters at end of clause func");
+                }
             }
         } else {
             ulp_error("Invalid line in [GRAPH]");
         }
     }
 
-    bool parse_grid_line() {
-        if (!eat_whitespace()) {
-            return false;
+    size_t grid_width = 0;
+    size_t grid_height = 0;
+    size_t grid_gens = 0;
+
+    void parse_grid_line() {
+        size_t v_size;
+        if (check_line("width = %zu", &v_size)) {
+            grid_width = v_size;
+        } else if (check_line("height = %zu", &v_size)) {
+            grid_height = v_size;
+        } else if (check_line("gens = %zu", &v_size)) {
+            grid_gens = v_size;
+        } else if (check_line("data : %zu", &v_size)) {
+            if (grid_width == 0 || grid_height == 0 || grid_gens == 0) {
+                ulp_error("Not all of width, height, and gens are provided before grid data (or are zero)");
+            }
+            out.grid.~Grid();
+            new (&out.grid) Grid(grid_width, grid_height, grid_gens);
+            if (out.grid.total_size != v_size) {
+                ulp_error("Grid size vs grid data list size mismatch (true size is %zu, given size is %zu)", out.grid.total_size, v_size);
+            }
+            for (size_t i = 0; i < out.grid.total_size; i++) {
+                Cell value;
+                if (!check(" %zu", &value)) {
+                    ulp_error("Missing grid item at index %zu", i);
+                }
+                out.grid.data[i] = value;
+            }
+        } else {
+            ulp_error("Invalid line in [GRID]");
         }
     }
 
-    bool parse_options_line() {
-        if (!eat_whitespace()) {
-            return false;
+    void parse_options_line() {
+        ULP::Options& options = out.options;
+        int v_int;
+        size_t v_size;
+        size_t v_size_2;
+        size_t v_size_3;
+        uintmax_t v_uintmax;
+        char v_str[256];
+        if (check_line("periodic = ( %zu , %zu ) c / %zu", &v_size, &v_size_2, &v_size_3)) {
+            options.periodic = true;
+            options.periodic_dx = v_size;
+            options.periodic_dy = v_size_2;
+            options.periodic_period = v_size_3;
+        } else if (check_line("after_rule_text = %255s", v_str)) {
+            size_t len = strnlen(v_str, 255);
+            options.after_rule_text = (char*)safe_malloc((len + 1) * sizeof(char));
+            strncpy(options.after_rule_text, v_str, len);
+        } else if (check_line("show_solutions = %i", &v_int)) {
+            options.show_solutions = v_int;
+        } else if (check_line("max_solutions = %zu", &v_uintmax)) {
+            options.max_solutions = v_uintmax;
+        } else {
+            ulp_error("Invalid line in [OPTIONS]");
         }
     }
 
@@ -343,27 +483,21 @@ public:
                 break;
             }
             size_t v_size;
-            if (parse_line("max_states = %zu", &v_size)) {
+            if (check_line("max_states = %zu", &v_size)) {
                 out.max_states = v_size;
                 section = NONE;
-            } else if (parse_line("[ GRAPH ]")) {
+            } else if (check_line("[ GRAPH ]")) {
                 section = GRAPH;
-            } else if (parse_line("[ GRID ]")) {
+            } else if (check_line("[ GRID ]")) {
                 section = GRID;
-            } else if (parse_line("[ OPTIONS ]")) {
+            } else if (check_line("[ OPTIONS ]")) {
                 section = OPTIONS;
             } else if (section == GRAPH) {
-                if (!parse_graph_line()) {
-                    break;
-                }
+                parse_graph_line();
             } else if (section == GRID) {
-                if (!parse_graph_line()) {
-                    break;
-                }
+                parse_grid_line();
             } else if (section == OPTIONS) {
-                if (!parse_graph_line()) {
-                    break;
-                }
+                parse_options_line();
             } else {
                 ulp_error("Invalid line\n");
             }

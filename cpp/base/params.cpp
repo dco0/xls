@@ -12,8 +12,8 @@
 // debugging level
 #define DEBUG_LEVEL 6
 
-// maximum number of saved solutions
-static constexpr size_t MAX_SAVED_SOLUTION_HASHES = 1048576Z;
+// maximum number of preprocessing iterations
+static constexpr uintmax_t MAX_PREPROCESSING_ITERATIONS = UINTMAX_C(4096);
 
 
 

@@ -270,7 +270,7 @@ static bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
-                if (grid.get(t, x, y) != V_OFF) {
+                if (grid.get(t, x, y) != cell_to_varvalue(0)) {
                     return false;
                 }
             }
@@ -333,8 +333,8 @@ static void check(Search& search, bool preprocessing) {
         }
         print_grid_pretty(ulp, solution_grid, true);
     }
-    if (ulp.options.max_solutions > 0) {
-        if (search.solutions_found >= ulp.options.max_solutions) {
+    if (ulp.options.max_solutions.has_value()) {
+        if (search.solutions_found >= ulp.options.max_solutions.value()) {
             double time = get_time() - search.start_time;
             printf("Search complete, found %zu solution%s in %.6f second%s, %zu branch%s (exited early, max solution count reached)\n", plural(search.solutions_found, "s"), plural(time, "s"), plural(search.branches, "es"));
             exit(EXIT_SUCCESS);

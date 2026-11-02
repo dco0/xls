@@ -16,7 +16,7 @@
 namespace vls {
 
 
-static Search search;
+static Search* search;
 
 
 typedef uint64_t ImplicState[16];
@@ -33,8 +33,6 @@ static ImplicState IMPLICSTATE_CELL_MASKS[10][3];
 // and IMPLICSTATE_PAIR_DIFFERENT_MASKS is the same thing but the cell values must be different
 static ImplicState IMPLICSTATE_PAIR_SAME_MASKS[10][10];
 static ImplicState IMPLICSTATE_PAIR_DIFFERENT_MASKS[10][10];
-
-constexpr const ptrdiff_t POWERS_OF_3[16] = {1Z, 3Z, 9Z, 27Z, 81Z, 243Z, 729Z, 2187Z, 6561Z, 19683Z, 59049Z, 177147Z, 531441Z, 1594323Z, 4782969Z, 14348907Z};
 
 
 static inline int implicstate_get_bit(const ImplicState state, int bit) {
@@ -137,8 +135,8 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
     implicstate_and(state, IMPLICSTATE_CELL_MASKS[9][nw]);
     uint64_t out = 0;
     for (int pos = 0; pos < 10; pos++) {
-        uint64_t* mask_0 = IMPLICSTATE_CELL_MASKS[pos][V_OFF];
-        uint64_t* mask_1 = IMPLICSTATE_CELL_MASKS[pos][V_ON];
+        uint64_t* mask_0 = IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue(0)];
+        uint64_t* mask_1 = IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue(1)];
         uint64_t any_can_be_0 = 0;
         uint64_t any_can_be_1 = 0;
         for (int i = 0; i < 16; i++) {
@@ -153,12 +151,12 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
         } else if (!can_be_0 && can_be_1) {
             if (cells[pos] == V_UNKNOWN) {
                 out <<= 6;
-                out |= (V_ON << 4) | pos;
+                out |= (cell_to_varvalue(1) << 4) | pos;
             }
         } else if (can_be_0 && !can_be_1) {
             if (cells[pos] == V_UNKNOWN) {
                 out <<= 6;
-                out |= (V_OFF << 4) | pos;
+                out |= (cell_to_varvalue(0) << 4) | pos;
             }
         } else {
             // do nothing
@@ -167,12 +165,12 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
     return out;
 }
 
-static void init_clause_implication_tr(Clause* clause) {
-    clause->implication_pointer = implication_table;
-    for (size_t i = 0; i < clause->var_count; i++) {
-        clause->implication_pointer += clause->vars[i]->value * POWERS_OF_3[i];
+static void init_clause_implication_tr(Clause& clause) {
+    clause.implication_pointer = implication_table;
+    for (size_t i = 0; i < clause.var_count; i++) {
+        clause.implication_pointer += clause.vars[i]->value * POWERS_OF_3[i];
     }
-    debug(4, printf("Transition for clause %zu: %ti\n", clause->number, clause->implication_pointer - implication_table));
+    debug(4, printf("Transition for clause %zu: %ti\n", clause.number, clause.implication_pointer - implication_table));
 }
 
 static void init_implications(ULP& ulp) {
@@ -181,8 +179,8 @@ static void init_implications(ULP& ulp) {
     for (uint32_t tr = 0; tr < 59049; tr++) {
         implication_table[tr] = get_implications_for_tr(tr);
     }
-    for (size_t i = 0; i < ulp.graph.clause_count; i++) {
-        init_clause_implication_tr(ulp.graph.clauses[i]);
+    for (size_t i = 0; i < ulp.clause_count; i++) {
+        init_clause_implication_tr(*ulp.clauses[i]);
     }
 }
 
@@ -194,11 +192,7 @@ static void destroy_implications(void) {
 static bool set_variable(Variable* var, VarValue value) {
     debug(4, printf("Setting variable %zu, value = %i, prev_value = %i\n", var->number, value, var->value));
     var->value = value;
-    #define update(clause, value) \
-        if ((clause) != NULL) { \
-            (clause)->implication_pointer += value##L; \
-        }
-    if (value == V_OFF) {
+    if (value == cell_to_varvalue(0)) {
         for (size_t i = 0; i < var->use_count; i++) {
             VarUse* data = &(var->uses[i]);
             data->clause->implication_pointer += data->change;
@@ -209,13 +203,13 @@ static bool set_variable(Variable* var, VarValue value) {
             data->clause->implication_pointer += data->change * 2;
         }
     }
-    search.set_unknown_cells++;
+    search->set_unknown_cells++;
     return true;
 }
 
 static void unset_variable(Variable* var) {
     debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var->number, var->value));
-    if (var->value == V_OFF) {
+    if (var->value == cell_to_varvalue(0)) {
         for (size_t i = 0; i < var->use_count; i++) {
             VarUse* data = &(var->uses[i]);
             data->clause->implication_pointer -= data->change;
@@ -227,7 +221,7 @@ static void unset_variable(Variable* var) {
         }
     }
     var->value = V_UNKNOWN;
-    search.set_unknown_cells--;
+    search->set_unknown_cells--;
 }
 
 
@@ -244,7 +238,7 @@ static inline bool check_clause_implications(Clause& clause) {
     while (code != 0) {
         int instruction = ((int)code) & 63;
         int cell_pos = instruction & 15;
-        Variable& var = *clause.vars[instruction & 15];
+        Variable& var = *clause.vars[cell_pos];
         VarValue value = (VarValue)(instruction >> 4);
         if (!set_variable_and_propagate(var, value, false)) {
             return false;
@@ -258,7 +252,6 @@ static inline bool check_cell_implications(Variable& var) {
     debug(4, printf("Checking implications for variable %zu\n", var.number));
     inc_debug_depth();
     for (size_t i = 0; i < var.use_count; i++) {
-        VarUse* data = &(var.uses[i]);
         if (!check_clause_implications(*var.uses[i].clause)) {
             dec_debug_depth();
             return false;
