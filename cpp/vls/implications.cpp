@@ -118,7 +118,9 @@ uint64_t get_implications_for_tr(uint32_t tr) {
     uint32_t nw = (tr / 19683) % 3;
     uint32_t cells[10] = {next, se, e, ne, s, c, n, sw, w, nw};
     ImplicState state;
-    memcpy(state, full_implic_state, sizeof(ImplicState));
+    for (int i = 0; i < 16; i++) {
+        state[i] = full_implic_state[i];
+    }
     implicstate_and(state, IMPLICSTATE_CELL_MASKS[0][next]);
     implicstate_and(state, IMPLICSTATE_CELL_MASKS[1][se]);
     implicstate_and(state, IMPLICSTATE_CELL_MASKS[2][e]);
@@ -185,21 +187,23 @@ void destroy_implications() {
 }
 
 
-bool set_variable(Variable* var, VarValue value) {
-    if (var->value != VV_UNKNOWN) {
+// returns false if contradiction, true if no contradiction
+// value parameter shouldn't be VV_UNKNOWN
+bool set_variable(Variable& var, VarValue value) {
+    if (var.is_known()) {
         // unexpected_error("Setting known cell");
-        return var->value == value;
+        return var.value == value;
     }
-    debug(4, printf("Setting variable %zu, value = %i, prev_value = %i\n", var->number, value, var->value));
-    var->value = value;
+    debug(4, printf("Setting variable %zu, value = %i, prev_value = %i\n", var.number, value, var.value));
+    var.value = value;
     if (value == gc_to_vv(0)) {
-        for (size_t i = 0; i < var->use_count; i++) {
-            Variable::VarUse& data = var->uses[i];
+        for (size_t i = 0; i < var.use_count; i++) {
+            VarUse& data = var.uses[i];
             data.clause->implication_pointer += data.change;
         }
     } else {
-        for (size_t i = 0; i < var->use_count; i++) {
-            Variable::VarUse& data = var->uses[i];
+        for (size_t i = 0; i < var.use_count; i++) {
+            VarUse& data = var.uses[i];
             data.clause->implication_pointer += data.change * 2;
         }
     }
@@ -207,24 +211,25 @@ bool set_variable(Variable* var, VarValue value) {
     return true;
 }
 
-void unset_variable(Variable* var) {
-    debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var->number, var->value));
-    if (var->value == gc_to_vv(0)) {
-        for (size_t i = 0; i < var->use_count; i++) {
-            Variable::VarUse& data = var->uses[i];
+// returns false if contradiction, true if no contradiction
+void unset_variable(Variable& var) {
+    debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var.number, var.value));
+    if (var.value == gc_to_vv(0)) {
+        for (size_t i = 0; i < var.use_count; i++) {
+            VarUse& data = var.uses[i];
             data.clause->implication_pointer -= data.change;
         }
     } else {
-        for (size_t i = 0; i < var->use_count; i++) {
-            Variable::VarUse& data = var->uses[i];
+        for (size_t i = 0; i < var.use_count; i++) {
+            VarUse& data = var.uses[i];
             data.clause->implication_pointer -= data.change * 2;
         }
     }
-    var->value = VV_UNKNOWN;
+    var.value = VV_UNKNOWN;
     search->set_unknown_vars--;
 }
 
-
+// returns false if contradiction, true if no contradiction
 bool set_variable_and_propagate(Variable& var, VarValue value, bool is_explicit);
 
 // returns false if contradiction, true if no contradiction

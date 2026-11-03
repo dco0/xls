@@ -11,10 +11,15 @@
 // basic options
 
 // debugging level
+#ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL 6
+#endif
 
 // maximum number of preprocessing iterations
 static constexpr uintmax_t MAX_PREPROCESSING_ITERATIONS = UINTMAX_C(4096);
+
+// for VLS backend, how often to check the time
+static constexpr const uintmax_t CHECK_TIME_EVERY_THIS_MANY_BRANCHES = UINTMAX_C(65536);
 
 
 

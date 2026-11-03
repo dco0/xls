@@ -187,12 +187,16 @@ private:
         }
         debug(2, printf("Aliasing variable %zu to %zu\n", var.number, alias_to.number));
         changes_made = true;
-        Variable* new_var = (Variable*)safe_malloc(sizeof(Variable) + (var.use_count + alias_to.use_count) * sizeof(VarUse));
+        Variable* new_var = safe_malloc<Variable>(1, sizeof(Variable) + (var.use_count + alias_to.use_count) * sizeof(VarUse));
         new_var->number = var.number;
-        new_var->value = V_UNKNOWN;
+        new_var->value = VV_UNKNOWN;
         new_var->use_count = var.use_count + alias_to.use_count;
-        memcpy(new_var->uses, &(var.uses), var.use_count * sizeof(VarUse));
-        memcpy(new_var->uses + var.use_count, &(alias_to.uses), alias_to.use_count * sizeof(VarUse));
+        for (size_t i = 0; i < var.use_count; i++) {
+            new_var->uses[i] = var.uses[i];
+        }
+        for (size_t i = 0; i < alias_to.use_count; i++) {
+            new_var->uses[i + var.use_count] = var.uses[i];
+        }
         for (size_t i = 0; i < ulp.grid.total_size; i++) {
             if (ulp.grid.data[i] == var.number || ulp.grid.data[i] == alias_to.number) {
                 ulp.grid.data[i] = new_var->value;
@@ -250,7 +254,7 @@ private:
         for (size_t i = 1; i <= ulp.var_count; i++) {
             Variable& var = *ulp.vars[i];
             // if the cell has a known value then set it to the corresponding cell
-            if (var.value != V_UNKNOWN) {
+            if (var.value != VV_UNKNOWN) {
                 alias_variable(var, *ulp.vars[vv_to_gc(var.value)]);
                 continue;
             }
@@ -295,7 +299,7 @@ private:
         // so we can set it to that!
         for (size_t i = 1; i <= ulp.var_count; i++) {
             Variable& var = *ulp.vars[i];
-            if (var.value != V_UNKNOWN) {
+            if (var.value != VV_UNKNOWN) {
                 continue;
             }
             bool can_be_0 = internal_check_implications(var, gc_to_vv(0));
@@ -355,7 +359,7 @@ private:
             Clause& clause = *ulp.clauses[i];
             bool found = false;
             for (size_t j = 0; j < clause.var_count; j++) {
-                if (clause.vars[j]->value == V_UNKNOWN) {
+                if (clause.vars[j]->is_unknown()) {
                     found = true;
                     break;
                 }

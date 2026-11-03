@@ -16,17 +16,23 @@ void run_search(Search& search) {
     search.branches = 0;
     search.solutions_found = 0;
     search.set_unknown_vars = 0;
+    search.start_unknown_vars = 0;
     for (size_t i = 0; i < ulp.var_count; i++) {
-        if (ulp.vars[i]->value == VV_UNKNOWN) {
-
+        if (!ulp.vars[i]->is_known()) {
+            search.start_unknown_vars++;
         }
     }
+    double time = get_time();
+    search.start_time = time;
+    search.last_progress_shown_time = time;
+    search.last_max_partial_shown_time = time;
 }
 
 int main(int argc, [[maybe_unused]] char** argv) {
     calibrate_time();
     // mark as static so destructor is called on exit()
-    static Search search;
+    static Options options;
+    static Search search = Search(options);
     ULP& ulp = search.ulp;
     errno = 0;
     #if IN_BROWSER
@@ -53,4 +59,5 @@ int main(int argc, [[maybe_unused]] char** argv) {
     vls::preprocess();
     printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
     run_search(search);
+    search.print_max_partial_at_end();
 }

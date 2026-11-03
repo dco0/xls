@@ -52,9 +52,9 @@ Finally, the `clauses` list must be given. A clause looks like: `0 9 2 0 0 0 0 2
 This section specifies how variables in the clause graph map to real patterns in the CA.
 
 These keys must be defined first:
-* `width = <number>` - The width of the pattern
-* `height = <number>` - The height of the pattern
-* `gens = <number>` - The number of generations of the pattern
+* `width = <number>` - The width of the pattern.
+* `height = <number>` - The height of the pattern.
+* `gens = <number>` - The number of generations of the pattern.
 
 Then, the `grid` list must be given, it is of length `gens * height` and contains `width`-long space-separated lists of cell values defining the pattern.
 
@@ -68,8 +68,11 @@ Possible options:
 * `periodic = (dx, dy)c/(period)` - Provided if a periodic pattern is being searched for, changes duplicate solution detection and early exhaustion stuff.
 * `check_early_exhaustion = <boolean>` - Enable early exhaustion checking (like LLSSS `--filters bcaf`), it's disabled by default.
 * `after_rule_text = <string>` - Sets text to be displayed after the rule, such as `:T20,20`
-* `show_solutions = <boolean>` - Set whether solutions are shown
-* `max_solutions = <integer>` - Set the maximum number of solutions to show, it will exit early once it reaches that point
+* `show_solutions = <boolean>` - Set whether solutions are shown (default true)
+* `max_solutions = <integer>` - Set the maximum number of solutions to show, it will exit early once it reaches that point.
+* `show_max_partials = <boolean>` - Set whether max partials are shown (default true)
+* `reporting_interval = <double>` - Set the interval at which progress is reported in seconds (default 1).
+* `max_partial_reporting_interval = <double>` - Set the minimum interval at which new max partials are reported in seconds, should be greater than or equal to `reporting_interval` (default 1).
 
 ### Example
 

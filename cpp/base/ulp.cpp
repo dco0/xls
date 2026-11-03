@@ -16,39 +16,46 @@
 #include "grid.cpp"
 
 
-struct ULP {
+struct Options {
 
+    enum class Backend {CNF, VLS};
+    Backend backend;
 
-    struct Options {
+    size_t search_order_list_len = 0;
+    // format: t, x, y
+    size_t (*search_order_list)[3] = nullptr;
 
-        enum class Backend {CNF, VLS};
-        Backend backend;
+    bool periodic = false;
+    uintmax_t periodic_dx = 0;
+    uintmax_t periodic_dy = 0;
+    uintmax_t periodic_period = 0;
+    bool check_early_exhaustion = false;
 
-        size_t search_order_list_len = 0;
-        // format: t, x, y
-        size_t (*search_order_list)[3] = nullptr;
+    char* after_rule_text = nullptr;
 
-        bool periodic = false;
-        uintmax_t periodic_dx = 0;
-        uintmax_t periodic_dy = 0;
-        uintmax_t periodic_period = 0;
-        bool check_early_exhaustion = false;
+    bool show_solutions = true;
+    std::optional<uintmax_t> max_solutions = std::nullopt;
 
-        char* after_rule_text = nullptr;
+    double reporting_interval = 1.0;
+    double max_partial_reporting_interval = 1.0;
 
-        bool show_solutions = true;
-        std::optional<uintmax_t> max_solutions = std::nullopt;
-
-        ~Options() {
-            if (search_order_list != nullptr) {
-                safe_free(search_order_list);
-            }
-            if (after_rule_text != nullptr) {
-                safe_free(after_rule_text);
-            }
+    ~Options() {
+        if (search_order_list != nullptr) {
+            safe_free(search_order_list);
         }
+        if (after_rule_text != nullptr) {
+            safe_free(after_rule_text);
+        }
+    }
 
-    };
+    bool show_max_partials = true;
+
+};
+
+
+class ULP {
+
+public:
 
     bool multi_rule = false;
 
@@ -93,30 +100,31 @@ struct ULP {
         }
     }
 
-    // copy constructor
-    ULP(const ULP& other) : options(other.options) {
-        // first the simple stuff
-        multi_rule = other.multi_rule;
-        max_states = other.max_states;
-        var_count = other.var_count;
-        func_count = other.func_count;
-        funcs = safe_malloc<ClauseFunc*>(func_count);
-        for (size_t i = 0; i < func_count; i++) {
-            funcs[i] = other.funcs[i]->copy_allocating();
-        }
-        rule_func_index = other.rule_func_index;
-        clause_count = other.clause_count;
-        grid = other.grid;
-        // now allocate them
-        vars = safe_malloc<Variable*>(var_count);
-        for (size_t i = 0; i < var_count; i++) {
-            Variable* other_var = other.vars[i];
-            Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + other_var->use_count * sizeof(Variable::VarUse));
-        }
-        clauses = safe_malloc<Clause*>(clause_count);
-        rule_func_index = other.rule_func_index;
-        clause_count = other.clause_count;
-    }
+    // UNFINISHED
+    // // copy constructor
+    // ULP(const ULP& other) : options(other.options) {
+    //     // first the simple stuff
+    //     multi_rule = other.multi_rule;
+    //     max_states = other.max_states;
+    //     var_count = other.var_count;
+    //     func_count = other.func_count;
+    //     funcs = safe_malloc<ClauseFunc*>(func_count);
+    //     for (size_t i = 0; i < func_count; i++) {
+    //         funcs[i] = other.funcs[i]->copy_allocating();
+    //     }
+    //     rule_func_index = other.rule_func_index;
+    //     clause_count = other.clause_count;
+    //     grid = other.grid;
+    //     // now allocate them
+    //     vars = safe_malloc<Variable*>(var_count);
+    //     for (size_t i = 0; i < var_count; i++) {
+    //         Variable* other_var = other.vars[i];
+    //         Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + other_var->use_count * sizeof(VarUse));
+    //     }
+    //     clauses = safe_malloc<Clause*>(clause_count);
+    //     rule_func_index = other.rule_func_index;
+    //     clause_count = other.clause_count;
+    // }
 
     inline bool gc_is_var(GridCell cell) const {
         return cell >= max_states;
@@ -139,9 +147,9 @@ struct ULP {
                 for (size_t x = 0; x < grid.width; x++) {
                     GridCell value = grid.get(t, x, y);
                     if (gc_is_var(value)) {
-                        Variable* var = vars[value];
-                        if (var->value != VV_UNKNOWN) {
-                            grid.set(t, x, y, vv_to_gc(var->value));
+                        Variable& var = *vars[value];
+                        if (var.is_known()) {
+                            grid.set(t, x, y, vv_to_gc(var.value));
                         }
                     }
                 }
@@ -411,7 +419,7 @@ private:
             e_fseek(start, SEEK_SET);
             // now allocate the variables
             for (size_t i = out.max_states; i < out.var_count; i++) {
-                Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + use_counts[i] * sizeof(Variable::VarUse));
+                Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + use_counts[i] * sizeof(VarUse));
                 var->number = i;
                 var->value = VV_UNKNOWN;
                 // set it to 0 so the next part can increment it to track how many have been assigned
@@ -447,7 +455,7 @@ private:
                     }
                     Variable* var = out.vars[var_number];
                     clause->vars[i] = var;
-                    Variable::VarUse& use = var->uses[var->use_count];
+                    VarUse& use = var->uses[var->use_count];
                     use.clause = clause;
                     use.change = POWERS_OF_3[j];
                     var->use_count++;
@@ -495,8 +503,9 @@ private:
     }
 
     void parse_options_line() {
-        ULP::Options& options = out.options;
+        Options& options = out.options;
         int v_int;
+        double v_double;
         size_t v_size;
         size_t v_size_2;
         size_t v_size_3;
@@ -504,9 +513,9 @@ private:
         char v_str[256];
         if (check_line("backend = %255s", v_str)) {
             if (strcmp(v_str, "cnf") == 0) {
-                options.backend = ULP::Options::Backend::CNF;
+                options.backend = Options::Backend::CNF;
             } else if (strcmp(v_str, "vls") == 0) {
-                options.backend = ULP::Options::Backend::VLS;
+                options.backend = Options::Backend::VLS;
             } else {
                 ulp_error("Invalid backend: '%s'", v_str);
             }
@@ -537,6 +546,12 @@ private:
             options.show_solutions = v_int;
         } else if (check_line("max_solutions = %zu", &v_uintmax)) {
             options.max_solutions = v_uintmax;
+        } else if (check_line("show_max_partials = %i", &v_int)) {
+            options.show_max_partials = v_int;
+        } else if (check_line("reporting_interval = %lf", &v_double)) {
+            options.reporting_interval = v_double;
+        } else if (check_line("max_partial_reporting_interval = %lf", &v_double)) {
+            options.max_partial_reporting_interval = v_double;
         } else {
             ulp_error("Invalid line in [OPTIONS]");
         }

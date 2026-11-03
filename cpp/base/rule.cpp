@@ -271,7 +271,9 @@ std::string unparse_map(const int* trs) {
     } else {
         // normal
         type_trs_length = 512;
-        memcpy(type_trs, trs, sizeof(type_trs));
+        for (int i = 0; i < 512; i++) {
+            type_trs[i] = trs[i];
+        }
     }
     // pack the transitions into bytes
     // we use 66 because it evenly divides into 3

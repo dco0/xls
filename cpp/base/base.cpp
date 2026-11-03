@@ -130,8 +130,8 @@ typedef size_t GridCell;
 typedef uint8_t VarValue;
 constexpr const VarValue VV_UNKNOWN = 0;
 
-[[gnu::always_inline]] inline VarValue gc_to_vv(GridCell cell) {
-    return (VarValue)(cell + 1);
+[[gnu::always_inline]] inline VarValue gc_to_vv(GridCell value) {
+    return (VarValue)(value + 1);
 }
 
 [[gnu::always_inline]] inline GridCell vv_to_gc(VarValue value) {
@@ -172,19 +172,27 @@ struct ClauseFunc {
 
 
 struct Clause;
+
+struct VarUse {
+    Clause* clause;
+    // for VLS backend trust me it needs it for the preprocessor too
+    ptrdiff_t change;
+};
  
 struct Variable {
-
-    struct VarUse {
-        Clause* clause;
-        // for VLS backend trust me it needs it for the preprocessor too
-        ptrdiff_t change;
-    };
 
     size_t number;
     VarValue value;
     size_t use_count;
     VarUse uses[];
+
+    inline bool is_unknown() const {
+        return value == VV_UNKNOWN;
+    }
+
+    inline bool is_known() const {
+        return value != VV_UNKNOWN;
+    }
 
 };
 

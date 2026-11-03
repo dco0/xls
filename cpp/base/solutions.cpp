@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <vector>
-#include <string>
 #include <algorithm>
 
 #include "base.cpp"
@@ -14,93 +13,6 @@
 #include "ulp.cpp"
 #include "search.cpp"
 #include "rule.cpp"
-
-
-inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
-    const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    if (ulp.max_states >= 3) {
-        if (!ulp.gc_is_var(value)) {
-            real_printf("%c", RLE_CHARS[value]);
-        } else {
-            real_printf("%c", RLE_CHARS[ulp.max_states]);
-        }
-    } else {
-        if (value == 0) {
-            real_printf(".");
-        } else if (value == 1) {
-            real_printf("o");
-        } else {
-            real_printf("B");
-        }
-    }
-}
-
-void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
-    std::string rule = rule::get(ulp, false);
-    if (ulp.multi_rule) {
-        std::string maxrule = rule::get(ulp, true);
-        if (rule != maxrule) {
-            printf("#C %s to %s\n", rule.c_str(), maxrule.c_str());
-        }
-    }
-    printf("x = %zu, y = %zu, rule = %s", grid.width, grid.height, rule.c_str());
-    // check for alternate printing method
-    if (is_solution) {
-        bool found = false;
-        for (size_t t = 0; t < grid.gens; t++) {
-            for (size_t y = 0; y < grid.height; y++) {
-                for (size_t x = 0; x < grid.width; x++) {
-                    if (ulp.gc_is_var(grid.get(t, x, y))) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (found) {
-                    break;
-                }
-            }
-            if (found) {
-                break;
-            }
-        }
-        if (!found) {
-            // finish the RLE header
-            real_printf("\n");
-            for (size_t y = 0; y < grid.height; y++) {
-                print_line_padding();
-                for (size_t x = 0; x < grid.width; x++) {
-                    GridCell value = grid.get(0, x, y);
-                    print_grid_cell_pretty(ulp, value);
-                }
-                if (y == grid.height - 1) {
-                    real_printf(" !\n");
-                } else {
-                    real_printf(" $\n");
-                }
-            }
-            return;
-        }
-    }
-    // finish the RLE header
-    real_printf("History\n");
-    for (size_t y = 0; y < grid.height; y++) {
-        print_line_padding();
-        for (size_t t = 0; t < grid.gens; t++) {
-            for (size_t x = 0; x < grid.width; x++) {
-                GridCell value = grid.get(t, x, y);
-                print_grid_cell_pretty(ulp, value);
-            }
-            if (t != grid.gens - 1) {
-                real_printf(" .|. ");
-            }
-        }
-        if (y == grid.height - 1) {
-            real_printf(" !\n");
-        } else {
-            real_printf(" $\n");
-        }
-    }
-}
 
 
 namespace solutions {
@@ -294,7 +206,7 @@ bool is_subperiod(const ULP& ulp, const Grid& grid) {
     }
     const Grid gen_0 = grid.extract_gen(0);
     for (size_t i = 1; i < ulp.options.periodic_period; i++) {
-        if (gen_0.eq(grid.extract_gen(i))) {
+        if (gen_0 == grid.extract_gen(i)) {
             return true;
         }
     }
@@ -321,8 +233,8 @@ void check(Search& search, bool preprocessing) {
         } \
         return;
     ulp.sync_search_grid();
-    Grid hash_grid = ulp.grid.copy();
-    Grid solution_grid = ulp.grid.copy();
+    Grid hash_grid = Grid(ulp.grid);
+    Grid solution_grid = Grid(ulp.grid);
     if (is_empty(ulp, hash_grid)) {
         drop_solution("empty");
     }

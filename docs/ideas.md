@@ -6,6 +6,7 @@ VLS backend:
 * preprocessing: custom set_cell_and_propagate that also does aliases in `vls::Preprocessor::check_variable_implications`
 * preprocessing: run every possible search order up to some depth
 * add inprocessing somehow??? requires redesigning ULP to allow copies...
+* better max partial scoring
 
 Scripting:
 * for mut

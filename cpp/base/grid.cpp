@@ -172,6 +172,10 @@ public:
         return *this;
     }
 
+    bool is_nothing() {
+        return width == 0 && height == 0 && gens == 0;
+    }
+
     bool is_in_bounds(size_t t, size_t x, size_t y) const {
         return t < this->gens && x < this->width && y < this->height;
     }
