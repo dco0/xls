@@ -225,7 +225,7 @@ private:
         exit(EXIT_FAILURE);
     }
 
-    #define ulp_error(format, ...) _ulp_error("Invalid ULP (near line %i): " format, ulp_error_line __VA_OPT__(,) __VA_ARGS__)
+    #define ulp_error(format, ...) _ulp_error("Invalid ULP (near line %i): " format "\n    at %s:%i\n" __VA_OPT__(,) __VA_ARGS__, __FILE__, __LINE__);
 
     int get_format_arg_count(const char* format) {
         int out = 0;

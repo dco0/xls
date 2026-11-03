@@ -44,14 +44,14 @@ int main(int argc, [[maybe_unused]] char** argv) {
     ULP& ulp = search.ulp;
     errno = 0;
     #if IN_BROWSER
-        if (argc != 0) {
-            error("Expected exactly 0 command line arguments\n");
+        if (argc != 1) {
+            error("Expected exactly 0 command line arguments");
         }
         static char* search_file = const_cast<char*>(SEARCH_FILE_GOES_HERE);
         FILE* file = fmemopen(search_file, sizeof(search_file) - 1, "r");
     #else
-        if (argc != 1) {
-            error("Expected exactly 1 command line argument\n");
+        if (argc != 2) {
+            error("Expected exactly 1 command line argument");
         }
         FILE* file = fopen(argv[1], "r");
     #endif

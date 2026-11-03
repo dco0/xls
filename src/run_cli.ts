@@ -216,7 +216,7 @@ async function searchForULP(ulp: ULP): Promise<void> {
     } catch (error) {
         process.exit(1);
     }
-    let runCmd = `${getPath('cpp/xls_compiled')} '${getPath('search.ulp')}'`;
+    let runCmd = `${getPath('.xls_compiled')} '${getPath('search.ulp')}'`;
     if (options['gdb']) {
         runCmd = `gdb --args ${runCmd}`;
         if (options['file']) {
