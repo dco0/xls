@@ -201,70 +201,9 @@ function getPath(path: string): string {
     return join(BASE_PATH, path);
 }
 
-async function changeParams2IfNeeded(): Promise<void> {
-    let paramsFile = (await fs.readFile(getPath('c/base/params.h'))).toString();
-    const CONSTANT_DEFINES = new Set([
-        '_POSIX_C_SOURCE',
-    ]);
-    let defines: {[key: string]: undefined | string | number | boolean} = Object.create(null);
-    defines['DEBUG_LEVEL'] = options.debug ?? 0;
-    let params2Lines: string[] = [];
-    let foundDefines = new Set<string>();
-    for (let line of paramsFile.split('\n')) {
-        let indent = '';
-        while (line.startsWith(' ')) {
-            indent += line[0];
-            line = line.slice(1);
-        }
-        if (!(line.startsWith('#define ') || line.startsWith('// #define '))) {
-            params2Lines.push(indent + line);
-            continue;
-        }
-        let data = line.split(' ');
-        if (data[0] === '//') {
-            data = data.slice(1);
-        }
-        let name = data[1];
-        foundDefines.add(name);
-        if (!(name in defines)) {
-            if (CONSTANT_DEFINES.has(name)) {
-                params2Lines.push(indent + line);
-                continue;
-            } else {
-                throw new Error(`This error should not occur, please report it (unrecognized #define: '${name}')`);
-            }
-        }
-        if (CONSTANT_DEFINES.has(name)) {
-            throw new Error(`This error should not occur, please report it (constant #define redefined: '${name}')`);
-        }
-        let value = defines[name];
-        if (value === undefined) {
-            params2Lines.push(indent + '// ' + data.join(' '));
-        } else {
-            params2Lines.push(indent + `#define ${name} ${value}`);
-        }
-    }
-    for (let name of Object.keys(defines)) {
-        if (!foundDefines.has(name)) {
-            throw new Error(`This error should not occur, please report it (#define not found: '${name}')`);
-        }
-    }
-    for (let name of CONSTANT_DEFINES) {
-        if (!foundDefines.has(name)) {
-            throw new Error(`This error should not occur, please report it (#define not found: '${name}')`);
-        }
-    }
-    let params2File = params2Lines.join('');
-    let oldParams2File = (await fs.readFile(getPath('c/base/params2.h'))).toString();
-    if (params2File !== oldParams2File) {
-        await fs.writeFile(getPath('c/base/params2.h'), params2File);
-    }
-}
-
 async function searchForULP(ulp: ULP): Promise<void> {
     await fs.writeFile(getPath('search.ulp'), ulp.toString());
-    await changeParams2IfNeeded();
-    let makeCmd = `make -f ${getPath('c//Makefile')}`;
+    let makeCmd = `make -f ${getPath('cpp/Makefile')}`;
     if (options['address-sanitizer']) {
         makeCmd += ` ASAN=1`;
     }
@@ -277,7 +216,7 @@ async function searchForULP(ulp: ULP): Promise<void> {
     } catch (error) {
         process.exit(1);
     }
-    let runCmd = `${getPath('c/xls_compiled')} '${getPath('search.ulp')}'`;
+    let runCmd = `${getPath('cpp/xls_compiled')} '${getPath('search.ulp')}'`;
     if (options['gdb']) {
         runCmd = `gdb --args ${runCmd}`;
         if (options['file']) {

@@ -1,4 +1,6 @@
 
+MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
 ASAN ?= 0
 NO_OPTIMIZE ?= 0
 
@@ -15,11 +17,11 @@ ifeq ($(ASAN), 1)
     CXXFLAGS += -fsanitize=address
 endif
 
-SRC = c/index.cpp
-TARGET = c/.vls_compiled
+SRC = cpp/index.cpp
+TARGET = cpp/.vls_compiled
 LDFLAGS = -lm
 
-TRACKED_FILES = $(shell find src/vls/c -type f)
+TRACKED_FILES = $(shell find $(MAKEFILE_DIR) -type f)
 
 BUILD_COMMAND_FILE = src/vls/.build_command
 BUILD_COMMAND = $(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)

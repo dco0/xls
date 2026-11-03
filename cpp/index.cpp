@@ -8,10 +8,12 @@
 #include "base/search.cpp"
 #include "vls/base.cpp"
 #include "vls/implications.cpp"
+#include "vls/search.cpp"
 #include "vls/preprocess.cpp"
 
 
 void run_search(Search& search) {
+    Options& options = search.options;
     ULP& ulp = search.ulp;
     search.branches = 0;
     search.solutions_found = 0;
@@ -26,6 +28,12 @@ void run_search(Search& search) {
     search.start_time = time;
     search.last_progress_shown_time = time;
     search.last_max_partial_shown_time = time;
+    if (options.backend == Options::Backend::VLS) {
+        vls::run_search();
+    } else {
+        error("CNF searching is not supported yet");
+    }
+    search.print_max_partial_at_end();
 }
 
 int main(int argc, [[maybe_unused]] char** argv) {
@@ -59,5 +67,4 @@ int main(int argc, [[maybe_unused]] char** argv) {
     vls::preprocess();
     printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
     run_search(search);
-    search.print_max_partial_at_end();
 }

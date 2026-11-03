@@ -164,7 +164,8 @@ size_t run_depth(size_t depth) {
         dec_debug_depth();
         return out == 0 ? 0 : out - 1;
     }
-    VarValue value = options->initial_value;
+    // VarValue value = options->initial_value;
+    VarValue value = gc_to_vv(1);
     for (int i = 0; i < 2; i++) {
         bool prev_all_zeros = all_zeros;
         if (value != gc_to_vv(0)) {
