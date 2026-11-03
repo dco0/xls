@@ -4,10 +4,11 @@ NO_OPTIMIZE ?= 0
 
 CXX = clang++
 
-CXXFLAGS = -g -fdiagnostics-color=always -std=c++23 -Wall -Werror -Wpedantic -Wextra -Wno-unknown-pragmas -Wno-c99-extensions -Wno-gnu-empty-struct -Wno-flexible-array-extensions -Wno-vla-cxx-extension -Wno-zero-length-array
+CXXFLAGS = -g -fdiagnostics-color=always -std=c++23 -Wall -Werror -Wpedantic -Wextra
+CXXFLAGS += -Wno-gnu-empty-struct, -Wno-zero-length-array, -Wno-c99-extensions, -Wno-flexible-array-extensions, -Wno-vla-cxx-extension
 
 ifneq ($(NO_OPTIMIZE), 1)
-    CXXFLAGS += -O3 -march=native -mtune=native -flto -fno-stack-protector -fomit-frame-pointer
+    CXXFLAGS += -O3 -march=native -mtune=native -flto -fvisibility=hidden -fvisibility-inlines-hidden -fno-stack-protector -fomit-frame-pointer
 endif
 
 ifeq ($(ASAN), 1)

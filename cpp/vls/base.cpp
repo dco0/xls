@@ -27,9 +27,9 @@ void load_search(Search& search) {
 
 // forward declarations
 
-static bool set_variable(Variable& var, VarValue value);
+bool set_variable(Variable& var, VarValue value);
 
-static void unset_variable(Variable& var);
+void unset_variable(Variable& var);
 
 
 class Stack {
@@ -176,12 +176,12 @@ public:
                 if (big_data.capacity < old_capacity) {
                     big_data.capacity = SIZE_MAX;
                 }
-                big_data.data = (Entry*)safe_realloc(big_data.data, big_data.capacity * sizeof(Entry));
+                big_data.data = safe_realloc(big_data.data, big_data.capacity * sizeof(Entry));
             }
             out = &(big_data.data[len]);
         } else if (len == STACK_INLINE_SIZE) {
             size_t capacity = STACK_INLINE_SIZE * 2;
-            Entry* data_ptr = (Entry*)safe_malloc(capacity * sizeof(Entry));
+            Entry* data_ptr = safe_malloc<Entry>(capacity);
             memcpy(data_ptr, &small_data, STACK_INLINE_SIZE * sizeof(Entry));
             is_big = true;
             big_data.capacity = capacity;

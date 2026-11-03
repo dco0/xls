@@ -19,7 +19,7 @@ namespace cnf {
     void preprocess_cnf(std::vector<std::vector<int>>&);
 
     struct cube { unsigned origin, span; };
-    std::vector<cube> make_primes(size_t, const Cell*);
+    std::vector<cube> make_primes(size_t, const GridCell*);
     void make_proposition(const std::vector<lit>&, const std::vector<cube>&, std::vector<std::vector<lit>>&);
 
     struct vmap_entry {
@@ -61,7 +61,7 @@ namespace cnf {
             ~ClauseFunc();
             size_t vars() const;
             size_t bits_per_var() const;
-            std::vector<bool> encode(Cell) const;
+            std::vector<bool> encode(GridCell) const;
             std::vector<std::vector<lit>> enforce_constraint(const std::vector<std::vector<lit>>&) const;
         };
     }

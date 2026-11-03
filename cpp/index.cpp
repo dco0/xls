@@ -6,9 +6,22 @@
 #include "base/base.cpp"
 #include "base/ulp.cpp"
 #include "base/search.cpp"
+#include "vls/base.cpp"
 #include "vls/implications.cpp"
 #include "vls/preprocess.cpp"
 
+
+void run_search(Search& search) {
+    ULP& ulp = search.ulp;
+    search.branches = 0;
+    search.solutions_found = 0;
+    search.set_unknown_vars = 0;
+    for (size_t i = 0; i < ulp.var_count; i++) {
+        if (ulp.vars[i]->value == VV_UNKNOWN) {
+
+        }
+    }
+}
 
 int main(int argc, [[maybe_unused]] char** argv) {
     calibrate_time();
@@ -39,4 +52,5 @@ int main(int argc, [[maybe_unused]] char** argv) {
     vls::search = &search;
     vls::preprocess();
     printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
+    run_search(search);
 }

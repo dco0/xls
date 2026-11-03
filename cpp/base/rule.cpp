@@ -124,7 +124,7 @@ const INTSpec hex_int = {
     },
 };
 
-static void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_value) {
+void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_value) {
     const GridCell* table = ulp.get_rule_func();
     for (int i = 0; i < 512; i++) {
         int j = (i & 273) | ((i >> 2) & 34) | ((i >> 4) & 4) | ((i << 2) & 136) | ((i << 4) & 64);
@@ -140,7 +140,7 @@ static void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_v
     }
 }
 
-static std::optional<std::string> unparse_transitions(const int* trs, const INTSpec* spec, bool s) {
+std::optional<std::string> unparse_transitions(const int* trs, const INTSpec* spec, bool s) {
     int s_or = s ? (1 << 4) : 0;
     std::string out;
     // stores what index in the transitions we are in
@@ -210,7 +210,7 @@ static std::optional<std::string> unparse_transitions(const int* trs, const INTS
 }
 
 // attempts to get the full rule using the given spec
-static std::optional<std::string> get_int_spec_rule(const int* trs, const INTSpec* spec) {
+std::optional<std::string> get_int_spec_rule(const int* trs, const INTSpec* spec) {
     std::string out = "B";
     auto b_str = unparse_transitions(trs, spec, false);
     auto s_str = unparse_transitions(trs, spec, true);
@@ -234,7 +234,7 @@ const int neighborhood_indexing[9][2] = {
     {-1, -1},
 };
 
-static void get_trs_neighborhood(bool out[9], const int* trs) {
+void get_trs_neighborhood(bool out[9], const int* trs) {
     for (int i = 0; i < 9; i++) {
         bool found = false;
         for (int tr = 0; tr < 512; tr++) {
@@ -248,8 +248,8 @@ static void get_trs_neighborhood(bool out[9], const int* trs) {
 }
 
 // unparse a general MAP rule
-static std::string unparse_map(const int* trs) {
-    const static char BASE64_TABLE[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string unparse_map(const int* trs) {
+    static const char BASE64_TABLE[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     // get the list of cells that matter
     bool neighborhood[9];
     get_trs_neighborhood(neighborhood, trs);
@@ -302,7 +302,7 @@ static std::string unparse_map(const int* trs) {
     return out;
 }
 
-static std::string get(const ULP& ulp, bool use_maxrule) {
+std::string get(const ULP& ulp, bool use_maxrule) {
     int trs[512];
     get_trs_from_clause_funcs(ulp, trs, use_maxrule ? 1 : 0);
     std::string out;
@@ -327,7 +327,7 @@ static std::string get(const ULP& ulp, bool use_maxrule) {
 }
 
 
-static Transformations get_identity_transforms(const ULP& ulp) {
+Transformations get_identity_transforms(const ULP& ulp) {
     const GridCell* func = ulp.get_rule_func();
     Transformations out;
     // rotation symmetries
@@ -380,7 +380,7 @@ static Transformations get_identity_transforms(const ULP& ulp) {
     return out;
 }
 
-static StaticSymmetry get_static_symmetry(const ULP& ulp) {
+StaticSymmetry get_static_symmetry(const ULP& ulp) {
     return transforms_to_static_symmetry(get_identity_transforms(ulp));
 }
 

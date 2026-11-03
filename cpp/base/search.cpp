@@ -12,6 +12,7 @@
 // sometimes it's not defined, so we have to do this
 extern int nanosleep(const struct timespec *__requested_time, struct timespec *__remaining);
 
+#include "grid.cpp"
 #include "ulp.cpp"
 
 
@@ -19,13 +20,19 @@ struct Search {
 
     ULP ulp = ULP();
 
-    size_t set_unknown_cells = 0;
-    size_t start_unknown_cells = 0;
+    size_t start_unknown_vars = 0;
+    size_t set_unknown_vars = 0;
 
     uintmax_t solutions_found = 0;
     uintmax_t branches = 0;
 
+    Grid max_partial;
+    uintmax_t max_partial_score = 0;
+    uintmax_t last_printed_max_partial_score = 0;
+
     double start_time = 0;
+    double last_progress_shown_time = 0;
+    double last_max_partial_shown_time = 0;
 
 };
 
@@ -36,23 +43,23 @@ struct Search {
     #else
         #include <x86intrin.h>
     #endif
-    static uint64_t read_counter() {
+    uint64_t read_counter() {
         return __rdtsc();
     }
 #elif defined(__aarch64__)
-    static uint64_t read_counter() {
+    uint64_t read_counter() {
         uint64_t val;
         __asm__ volatile("mrs %0, cntvct_el0" : "=r" (val));
         return val;
     }
 #elif defined(__riscv) && __riscv_xlen == 64
-    static uint64_t read_counter() {
+    uint64_t read_counter() {
         uint64_t cycles;
         __asm__ volatile("rdcycle %0" : "=r"(cycles));
         return cycles;
     }
 #elif defined(__powerpc__) || defined(__ppc__)
-    static uint64_t read_counter() {
+    uint64_t read_counter() {
         uint64_t tb;
         __asm__ volatile("mfspr %0, 268" : "=r"(tb));
         return tb;
@@ -65,7 +72,7 @@ struct Search {
 
 static double cycles_per_second;
 
-static void calibrate_time() {
+void calibrate_time() {
     struct timespec request;
     struct timespec remainder;
     // 0.01 seconds
@@ -77,6 +84,6 @@ static void calibrate_time() {
     cycles_per_second = (end - start) * 100;
 }
 
-static double get_time() {
+double get_time() {
     return (double)(read_counter()) / cycles_per_second;
 }

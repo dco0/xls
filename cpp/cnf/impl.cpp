@@ -17,7 +17,7 @@ namespace cnf::cf {
         mutable bool cached = false;
         mutable std::vector<cube> cache;
         BinaryLut(::ULP* ulp, ::ClauseFunc* cf) : ulp(ulp), cf(cf) {
-            if (cf->type != ClauseFuncType::LOOKUP_TABLE) {
+            if (cf->type != ::ClauseFunc::Type::LOOKUP_TABLE) {
                 error("BinaryLut clause func must be a lookup table");
             }
         }
@@ -27,7 +27,7 @@ namespace cnf::cf {
         size_t bits_per_var() const {
             return 2;
         }
-        std::vector<bool> encode(Cell cell) const {
+        std::vector<bool> encode(GridCell cell) const {
             return {(bool)cell};
         }
         std::vector<std::vector<lit>> enforce_constraint(const std::vector<std::vector<lit>>& cells) const {
@@ -47,7 +47,7 @@ namespace cnf::cf {
 namespace cnf::cf {
     ClauseFunc::ClauseFunc(::ULP* ulp, ::ClauseFunc* cf) : cf(cf) {
         switch (cf->type) {
-            case (::ClauseFuncType::LOOKUP_TABLE):
+            case (::ClauseFunc::Type::LOOKUP_TABLE):
                 if (ulp->max_states != 2) error("not implemented");
                 impl.binary_lut = new BinaryLut{ulp, cf};
                 type = Type::BINARY_LUT;
@@ -76,7 +76,7 @@ namespace cnf::cf {
         }
         unreachable
     }
-    std::vector<bool> ClauseFunc::encode(Cell cell) const {
+    std::vector<bool> ClauseFunc::encode(GridCell cell) const {
         switch (type) {
             case (Type::BINARY_LUT):
                 return impl.binary_lut->encode(cell);

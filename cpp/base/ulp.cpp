@@ -18,21 +18,6 @@
 
 struct ULP {
 
-    bool multi_rule = false;
-
-    uint64_t max_states = 0;
-
-    size_t var_count = 0;
-    Variable** vars = nullptr;
-
-    size_t func_count = 0;
-    ClauseFunc** funcs = nullptr;
-    size_t rule_func_index = 0;
-
-    size_t clause_count = 0;
-    Clause** clauses = nullptr;
-
-    Grid grid = Grid(0, 0, 0);
 
     struct Options {
 
@@ -65,7 +50,27 @@ struct ULP {
 
     };
 
-    Options options;
+    bool multi_rule = false;
+
+    uint64_t max_states = 0;
+
+    size_t var_count = 0;
+    Variable** vars = nullptr;
+
+    size_t func_count = 0;
+    ClauseFunc** funcs = nullptr;
+    size_t rule_func_index = 0;
+
+    size_t clause_count = 0;
+    Clause** clauses = nullptr;
+
+    Grid grid = Grid(0, 0, 0);
+
+    Options& options;
+
+    ULP(Options& options) : options(options) {
+        // do nothing
+    }
 
     ~ULP() {
         if (vars != nullptr) {
@@ -88,6 +93,31 @@ struct ULP {
         }
     }
 
+    // copy constructor
+    ULP(const ULP& other) : options(other.options) {
+        // first the simple stuff
+        multi_rule = other.multi_rule;
+        max_states = other.max_states;
+        var_count = other.var_count;
+        func_count = other.func_count;
+        funcs = safe_malloc<ClauseFunc*>(func_count);
+        for (size_t i = 0; i < func_count; i++) {
+            funcs[i] = other.funcs[i]->copy_allocating();
+        }
+        rule_func_index = other.rule_func_index;
+        clause_count = other.clause_count;
+        grid = other.grid;
+        // now allocate them
+        vars = safe_malloc<Variable*>(var_count);
+        for (size_t i = 0; i < var_count; i++) {
+            Variable* other_var = other.vars[i];
+            Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + other_var->use_count * sizeof(Variable::VarUse));
+        }
+        clauses = safe_malloc<Clause*>(clause_count);
+        rule_func_index = other.rule_func_index;
+        clause_count = other.clause_count;
+    }
+
     inline bool gc_is_var(GridCell cell) const {
         return cell >= max_states;
     }
@@ -97,7 +127,7 @@ struct ULP {
         if (func->var_count != 10) {
             error("Rule function must have 10 inputs");
         }
-        if (func->type != ClauseFuncType::LOOKUP_TABLE) {
+        if (func->type != ClauseFunc::Type::LOOKUP_TABLE) {
             error("Rule function must be a lookup table");
         }
         return const_cast<const GridCell*>(func->data.lookup_table.table);
@@ -110,7 +140,7 @@ struct ULP {
                     GridCell value = grid.get(t, x, y);
                     if (gc_is_var(value)) {
                         Variable* var = vars[value];
-                        if (var->value != V_UNKNOWN) {
+                        if (var->value != VV_UNKNOWN) {
                             grid.set(t, x, y, vv_to_gc(var->value));
                         }
                     }
@@ -310,10 +340,10 @@ private:
         if (check_line("var_count = %zu", &v_size)) {
             out.var_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.vars = (Variable**)safe_realloc(out.vars, v_size * sizeof(Variable*));
+            out.vars = safe_realloc(out.vars, v_size);
             // fill in the implicit vars
             for (size_t i = 0; i < out.max_states; i++) {
-                Variable* var = (Variable*)safe_malloc(sizeof(Variable));
+                Variable* var = safe_malloc<Variable>(1, sizeof(Variable));
                 out.vars[i] = var;
                 var->number = i;
             }
@@ -323,7 +353,7 @@ private:
             }
             out.func_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.funcs = (ClauseFunc**)safe_realloc(out.funcs, v_size * sizeof(ClauseFunc*));
+            out.funcs = safe_realloc<ClauseFunc*>(out.funcs, v_size);
             for (size_t i = 0; i < v_size; i++) {
                 size_t var_count;
                 if (!check(" %zu", &var_count)) {
@@ -331,8 +361,8 @@ private:
                 }
                 if (check(" lookup_table")) {
                     size_t len = 1UZ << var_count;
-                    ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(GridCell));
-                    func->type = ClauseFuncType::LOOKUP_TABLE;
+                    ClauseFunc* func = safe_malloc<ClauseFunc>(1, sizeof(ClauseFunc) + len * sizeof(GridCell));
+                    func->type = ClauseFunc::Type::LOOKUP_TABLE;
                     func->var_count = var_count;
                     for (size_t i = 0; i < len; i++) {
                         GridCell value;
@@ -381,9 +411,9 @@ private:
             e_fseek(start, SEEK_SET);
             // now allocate the variables
             for (size_t i = out.max_states; i < out.var_count; i++) {
-                Variable* var = (Variable*)safe_malloc(sizeof(Variable) + use_counts[i] * sizeof(VarUse));
+                Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + use_counts[i] * sizeof(Variable::VarUse));
                 var->number = i;
-                var->value = V_UNKNOWN;
+                var->value = VV_UNKNOWN;
                 // set it to 0 so the next part can increment it to track how many have been assigned
                 var->use_count = 0;
                 out.vars[i] = var;
@@ -391,7 +421,7 @@ private:
             // finally, do the clauses
             out.clause_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.clauses = (Clause**)safe_realloc(out.clauses, v_size * sizeof(Clause*));
+            out.clauses = safe_realloc(out.clauses, v_size);
             for (size_t i = 0; i < out.clause_count; i++) {
                 size_t func_number;
                 if (!check(" %zu", &func_number)) {
@@ -405,7 +435,7 @@ private:
                 if (!check(" %zu", &var_count)) {
                     ulp_error("No variable count provided for clause %zu", i);
                 }
-                Clause* clause = (Clause*)safe_malloc(sizeof(Clause) + var_count * sizeof(Variable*));
+                Clause* clause = safe_malloc<Clause>(1, sizeof(Clause) + var_count * sizeof(Variable*));
                 clause->number = i;
                 clause->func = func;
                 clause->implication_pointer = nullptr;
@@ -417,7 +447,7 @@ private:
                     }
                     Variable* var = out.vars[var_number];
                     clause->vars[i] = var;
-                    VarUse& use = var->uses[var->use_count];
+                    Variable::VarUse& use = var->uses[var->use_count];
                     use.clause = clause;
                     use.change = POWERS_OF_3[j];
                     var->use_count++;
@@ -484,7 +514,7 @@ private:
             size_t len = v_size;
             options.search_order_list_len = len;
             // realloc behaves like malloc for null pointers
-            options.search_order_list = (size_t(*)[3])safe_realloc(options.search_order_list, len * 3 * sizeof(size_t));
+            options.search_order_list = safe_realloc(options.search_order_list, len);
             for (size_t i = 0; i < len; i++) {
                 if (!check_line("%zu %zu %zu", &v_size, &v_size_2, &v_size_3)) {
                     ulp_error("Search order list item %zu is missing or invalid", i);
@@ -501,7 +531,7 @@ private:
             options.periodic_period = v_size_3;
         } else if (check_line("after_rule_text = %255s", v_str)) {
             size_t len = strnlen(v_str, 255);
-            options.after_rule_text = (char*)safe_malloc((len + 1) * sizeof(char));
+            options.after_rule_text = safe_malloc<char>(len + 1);
             strncpy(options.after_rule_text, v_str, len);
         } else if (check_line("show_solutions = %i", &v_int)) {
             options.show_solutions = v_int;

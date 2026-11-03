@@ -35,4 +35,4 @@ static void cnf_free(CNF* cnf) {
     safe_free(cnf);
 }
 
-CNF* cnf_encode(const ULP* ulp);
+CNF cnf_encode(const ULP& ulp);

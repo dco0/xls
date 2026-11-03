@@ -70,7 +70,7 @@ private:
             if (current_allocated_bytes > GRID_CACHE_MAX_MEMORY) {
 
             }
-            return (GridCell*)safe_malloc(size * sizeof(GridCell));
+            return safe_malloc<GridCell>();
         }
     }
 
@@ -119,6 +119,59 @@ public:
         deallocate_cells(data, total_size);
     }
 
+    // copy constructor
+    Grid(const Grid& other) {
+        width = other.width;
+        height = other.height;
+        gens = other.gens;
+        total_size = other.total_size;
+        data = allocate_cells(total_size);
+        memcpy(data, other.data, total_size);
+    }
+
+    // copy assignment operator
+    Grid& operator=(const Grid& other) {
+        if (this == &other) {
+            return *this;
+        }
+        deallocate_cells(data, total_size);
+        width = other.width;
+        height = other.height;
+        gens = other.gens;
+        total_size = other.total_size;
+        data = allocate_cells(total_size);
+        memcpy(data, other.data, total_size);
+        return *this;
+    }
+
+    // move constructor
+    Grid(Grid&& other) : width(other.width), height(other.height), gens(other.gens), total_size(other.total_size), data(other.data) {
+        other.width = 0;
+        other.height = 0;
+        other.gens = 0;
+        other.total_size = 0;
+        other.data = nullptr;
+    }
+
+    // move assignment operator
+    Grid& operator=(Grid&& other) {
+        if (this == &other) {
+            return *this;
+        }
+        deallocate_cells(data, total_size);
+        width = other.width;
+        height = other.height;
+        gens = other.gens;
+        total_size = other.total_size;
+        data = other.data;
+        other.width = 0;
+        other.height = 0;
+        other.gens = 0;
+        other.total_size = 0;
+        other.data = nullptr;
+        return *this;
+    }
+
     bool is_in_bounds(size_t t, size_t x, size_t y) const {
         return t < this->gens && x < this->width && y < this->height;
     }
@@ -131,7 +184,7 @@ public:
         data[((t * height) + y) * width + x] = value;
     }
 
-    bool eq(const Grid& other) const {
+    bool operator==(const Grid& other) const {
         if (width != other.width || height != other.height || gens != other.gens) {
             return false;
         }
@@ -141,12 +194,6 @@ public:
             }
         }
         return true;
-    }
-
-    Grid copy() const {
-        Grid out = Grid(width, height, gens);
-        memcpy(out.data, data, total_size * sizeof(GridCell));
-        return out;
     }
 
     Grid flip_horizontal() const {
@@ -358,25 +405,25 @@ public:
 
     Transformations get_identity_transforms() const {
         Transformations out;
-        if (eq(flip_horizontal())) {
+        if (*this == flip_horizontal()) {
             out.flip_horizontal = true;
         }
-        if (eq(flip_vertical())) {
+        if (*this == flip_vertical()) {
             out.flip_vertical = true;
         }
-        if (eq(rotate_left())) {
+        if (*this == rotate_left()) {
             out.rotate_left = true;
         }
-        if (eq(rotate_right())) {
+        if (*this == rotate_right()) {
             out.rotate_right = true;
         }
-        if (eq(rotate_180())) {
+        if (*this == rotate_180()) {
             out.rotate_180 = true;
         }
-        if (eq(flip_diagonal())) {
+        if (*this == flip_diagonal()) {
             out.flip_diagonal = true;
         }
-        if (eq(flip_anti_diagonal())) {
+        if (*this == flip_anti_diagonal()) {
             out.flip_anti_diagonal = true;
         }
         return out;

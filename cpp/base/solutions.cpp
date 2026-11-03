@@ -16,7 +16,7 @@
 #include "rule.cpp"
 
 
-static inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
+inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
     const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     if (ulp.max_states >= 3) {
         if (!ulp.gc_is_var(value)) {
@@ -35,7 +35,7 @@ static inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
     }
 }
 
-static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
+void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
     std::string rule = rule::get(ulp, false);
     if (ulp.multi_rule) {
         std::string maxrule = rule::get(ulp, true);
@@ -112,27 +112,27 @@ constexpr Hash HASH_OFFSET = 0xcbf29ce484222325ULL;
 constexpr Hash HASH_PRIME = 0x00000100000001b3ULL;
 constexpr Hash MAX_HASH = UINT64_MAX;
 
-static inline Hash update_hash(Hash hash, uint8_t value) {
+inline Hash update_hash(Hash hash, uint8_t value) {
     hash ^= value;
     hash *= HASH_PRIME;
     return hash;
 }
 
-static inline Hash update_hash(Hash hash, int8_t value) {
+inline Hash update_hash(Hash hash, int8_t value) {
     return update_hash(hash, (uint8_t)(value));
 }
 
-static inline Hash update_hash(Hash hash, uint16_t value) {
+inline Hash update_hash(Hash hash, uint16_t value) {
     hash = update_hash(hash, (uint8_t)(value & 0xff));
     hash = update_hash(hash, (uint8_t)(value >> 8));
     return hash;
 }
 
-static inline Hash update_hash(Hash hash, int16_t value) {
+inline Hash update_hash(Hash hash, int16_t value) {
     return update_hash(hash, (uint16_t)(value));
 }
 
-static inline Hash update_hash(Hash hash, uint32_t value) {
+inline Hash update_hash(Hash hash, uint32_t value) {
     hash = update_hash(hash, (uint8_t)(value & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 8) & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 16) & 0xff));
@@ -140,11 +140,11 @@ static inline Hash update_hash(Hash hash, uint32_t value) {
     return hash;
 }
 
-static inline Hash update_hash(Hash hash, int32_t value) {
+inline Hash update_hash(Hash hash, int32_t value) {
     return update_hash(hash, (uint32_t)(value));
 }
 
-static inline Hash update_hash(Hash hash, uint64_t value) {
+inline Hash update_hash(Hash hash, uint64_t value) {
     hash = update_hash(hash, (uint8_t)(value & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 8) & 0xff));
     hash = update_hash(hash, (uint8_t)((value >> 16) & 0xff));
@@ -156,22 +156,22 @@ static inline Hash update_hash(Hash hash, uint64_t value) {
     return hash;
 }
 
-static inline Hash update_hash(Hash hash, int64_t value) {
+inline Hash update_hash(Hash hash, int64_t value) {
     return update_hash(hash, (uint64_t)(value));
 }
 
-static inline Hash update_hash(Hash hash, const char* value) {
+inline Hash update_hash(Hash hash, const char* value) {
     for (size_t i = 0; value[i] != '\0'; i++) {
         update_hash(hash, value[i]);
     }
     return hash;
 }
 
-static Hash min_hash(Hash x, Hash y) {
+Hash min_hash(Hash x, Hash y) {
     return x < y ? x : y;
 }
 
-// static Hash grid_hash_at_time(const Grid& grid, size_t t) {
+// Hash grid_hash_at_time(const Grid& grid, size_t t) {
 //     Hash out = HASH_OFFSET;
 //     update_hash(out, grid.width);
 //     update_hash(out, grid.height);
@@ -183,7 +183,7 @@ static Hash min_hash(Hash x, Hash y) {
 //     return out;
 // }
 
-static Hash hash_all_times(const Grid& grid) {
+Hash hash_all_times(const Grid& grid) {
     Hash out = HASH_OFFSET;
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
@@ -196,7 +196,7 @@ static Hash hash_all_times(const Grid& grid) {
     return out;
 }
 
-static Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid, size_t offset, intmax_t dx, intmax_t dy) {
+Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid, size_t offset, intmax_t dx, intmax_t dy) {
     Hash out = HASH_OFFSET;
     // determine x_offset_0 and y_offset_0
     const auto offsets = grid.extract_gen(offset).get_shrink_to_fit_offsets();
@@ -226,7 +226,7 @@ static Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid
     return out;
 }
 
-static Hash hash_all_times_periodic(const ULP& ulp, const Grid& grid, size_t dx, size_t dy) {
+Hash hash_all_times_periodic(const ULP& ulp, const Grid& grid, size_t dx, size_t dy) {
     Hash out = MAX_HASH;
     for (size_t offset = 0; offset < ulp.options.periodic_period; offset++) {
         out = min_hash(out, hash_all_times_periodic_with_offset(ulp, grid, offset, dx, dy));
@@ -234,7 +234,7 @@ static Hash hash_all_times_periodic(const ULP& ulp, const Grid& grid, size_t dx,
     return out;
 }
 
-static Hash grid_hash_full(const ULP& ulp, const Grid& grid) {
+Hash grid_hash_full(const ULP& ulp, const Grid& grid) {
     StaticSymmetry rule_symmetry = rule::get_static_symmetry(ulp);
     StaticSymmetry grid_symmetry = grid.get_static_symmetry();
     StaticSymmetry symmetry = STATIC_SYMMETRY_MEET[rule_symmetry][grid_symmetry];
@@ -275,7 +275,7 @@ static Hash grid_hash_full(const ULP& ulp, const Grid& grid) {
 }
 
 
-static bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
+bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
@@ -288,7 +288,7 @@ static bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     return true;
 }
 
-static bool is_subperiod(const ULP& ulp, const Grid& grid) {
+bool is_subperiod(const ULP& ulp, const Grid& grid) {
     if (!ulp.options.periodic) {
         return false;
     }
@@ -301,7 +301,7 @@ static bool is_subperiod(const ULP& ulp, const Grid& grid) {
     return false;
 }
 
-static bool is_duplicate(const ULP& ulp, const Grid& grid) {
+bool is_duplicate(const ULP& ulp, const Grid& grid) {
     static std::vector<Hash> prev_hashes;
     Hash hash = grid_hash_full(ulp, grid);
     if (std::find(prev_hashes.begin(), prev_hashes.end(), hash) != prev_hashes.end()) {
@@ -312,7 +312,7 @@ static bool is_duplicate(const ULP& ulp, const Grid& grid) {
     }
 }
 
-static void check(Search& search, bool preprocessing) {
+void check(Search& search, bool preprocessing) {
     ULP& ulp = search.ulp;
     #define drop_solution(msg) \
         debug(2, printf("Dropping solution (" msg ")\n")); \

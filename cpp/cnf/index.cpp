@@ -15,7 +15,7 @@ namespace cnf {
     CNF_clauses* vec_to_clauses(const cnf_holder& holder) {
         size_t length = holder.clauses.size();
         for (const auto& i : holder.clauses) length += i.size();
-        CNF_clauses* clauses = (CNF_clauses*) safe_malloc(sizeof(CNF_clauses) + sizeof(int) * length);
+        CNF_clauses* clauses = safe_malloc<CNF_clauses>(1, sizeof(CNF_clauses) + sizeof(int) * length);
         clauses->clause_count = holder.clauses.size();
         clauses->var_count = holder.max_lit;
         int* ptr = clauses->lits;
@@ -36,7 +36,7 @@ namespace cnf {
             size += size%VMAP_OFFSET ? VMAP_OFFSET-size%VMAP_OFFSET : 0;
             stride = size > stride ? size : stride;
         }
-        CNF_vmap* vmap = (CNF_vmap*) safe_malloc(sizeof(CNF_vmap) + stride * holder.vmap.size());
+        CNF_vmap* vmap = safe_malloc<CNF_vmap>(1, sizeof(CNF_vmap) + stride * holder.vmap.size());
         vmap->var_count = holder.vmap.size();
         vmap->stride = stride / VMAP_OFFSET;
         for (size_t i = 0; i < holder.vmap.size(); i++) {
@@ -63,14 +63,14 @@ namespace cnf {
 
 } // namespace cnf
 
-CNF* cnf_encode(const ULP* ulp) {
+CNF cnf_encode(const ULP& ulp) {
     cnf::cnf_holder clauses;
 
     // do stuff?!?!?!?
 
     cnf::preprocess_cnf(clauses.clauses);
-    CNF* cnf = (CNF*) safe_malloc(sizeof(CNF));
-    cnf->clauses = cnf::vec_to_clauses(clauses);
-    cnf->vmap = cnf::vec_to_vmap(clauses);
+    CNF cnf;
+    cnf.clauses = cnf::vec_to_clauses(clauses);
+    cnf.vmap = cnf::vec_to_vmap(clauses);
     return cnf;
 }

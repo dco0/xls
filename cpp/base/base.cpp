@@ -70,23 +70,53 @@
 
 // better allocation functions
 
-static void* safe_malloc(size_t size) {
-    void* out = malloc(size);
+template<typename T>
+concept DoesntHaveFlexibleArrayMember = requires {
+    ([] () -> void {
+        struct Test {
+            T x;
+            T y;
+        };
+    })();
+};
+
+template<typename T> requires(DoesntHaveFlexibleArrayMember<T>)
+T* safe_malloc() {
+    void* out = malloc(sizeof(T));
     if (out == nullptr) {
         error("In malloc(): %s", strerror(errno));
     }
-    return out;
+    return (T*)out;
 }
 
-static void* safe_realloc(void* ptr, size_t size) {
-    void* out = realloc(ptr, size);
+template<typename T> requires(DoesntHaveFlexibleArrayMember<T>)
+T* safe_malloc(size_t len) {
+    void* out = malloc(sizeof(T) * len);
+    if (out == nullptr) {
+        error("In malloc(): %s", strerror(errno));
+    }
+    return (T*)out;
+}
+
+template<typename T>
+T* safe_malloc(size_t len, size_t size) {
+    void* out = malloc(len * size);
+    if (out == nullptr) {
+        error("In malloc(): %s", strerror(errno));
+    }
+    return (T*)out;
+}
+
+template<typename T>
+T* safe_realloc(T* ptr, size_t len) {
+    void* out = realloc(ptr, len * sizeof(T));
     if (out == nullptr) {
         error("In realloc(): %s", strerror(errno));
     }
-    return out;
+    return (T*)out;
 }
 
-static void safe_free(void* ptr) {
+void safe_free(void* ptr) {
     free(ptr);
 }
 
@@ -98,13 +128,13 @@ constexpr const ptrdiff_t POWERS_OF_3[16] = {1Z, 3Z, 9Z, 27Z, 81Z, 243Z, 729Z, 2
 typedef size_t GridCell;
 
 typedef uint8_t VarValue;
-constexpr const VarValue V_UNKNOWN = 0;
+constexpr const VarValue VV_UNKNOWN = 0;
 
-[[gnu::always_inline]] static inline VarValue gc_to_vv(GridCell cell) {
+[[gnu::always_inline]] inline VarValue gc_to_vv(GridCell cell) {
     return (VarValue)(cell + 1);
 }
 
-[[gnu::always_inline]] static inline GridCell vv_to_gc(VarValue value) {
+[[gnu::always_inline]] inline GridCell vv_to_gc(VarValue value) {
     return value - 1;
 }
 
@@ -112,34 +142,55 @@ struct LookupTableClauseFunc {
     GridCell table[];
 };
 
-enum class ClauseFuncType : uint8_t {
-    LOOKUP_TABLE,
-};
-
 struct ClauseFunc {
+
+    enum class Type : uint8_t {
+        LOOKUP_TABLE,
+    };
+
     size_t var_count;
-    ClauseFuncType type;
+    Type type;
     union {
         LookupTableClauseFunc lookup_table;
     } data;
+
+    ClauseFunc* copy_allocating() const {
+        if (type == Type::LOOKUP_TABLE) {
+            ClauseFunc* out = safe_malloc<ClauseFunc>(1, sizeof(ClauseFunc) + var_count * sizeof(GridCell));
+            out->var_count = var_count;
+            out->type = type;
+            for (size_t i = 0; i < var_count; i++) {
+                out->data.lookup_table.table[i] = data.lookup_table.table[i];
+            }
+            return out;
+        } else {
+            error("This error should not occur (invalid clause func type)");
+        }
+    }
+
 };
+
 
 struct Clause;
-
-struct VarUse {
-    Clause* clause;
-    // for VLS backend trust me it needs it for the preprocessor too
-    ptrdiff_t change;
-};
  
 struct Variable {
+
+    struct VarUse {
+        Clause* clause;
+        // for VLS backend trust me it needs it for the preprocessor too
+        ptrdiff_t change;
+    };
+
     size_t number;
     VarValue value;
     size_t use_count;
     VarUse uses[];
+
 };
 
+
 struct Clause {
+
     size_t number;
     ClauseFunc* func;
     // for VLS backend trust me it needs it for the preprocessor too
@@ -202,11 +253,11 @@ static const StaticSymmetry STATIC_SYMMETRY_MEET[10][10] = {
     /* [D8 ] = */ {C1 , C2 , C4 , D2h, D2v, D2b, D2s, D4p, D4x, D8 },
 };
 
-static bool static_symmetry_contains(StaticSymmetry container, StaticSymmetry value) {
+bool static_symmetry_contains(StaticSymmetry container, StaticSymmetry value) {
     return STATIC_SYMMETRY_JOIN[container][value] == container;
 }
 
-static Transformations static_symmetry_to_transforms(StaticSymmetry symmetry) {
+Transformations static_symmetry_to_transforms(StaticSymmetry symmetry) {
     Transformations out;
     out.flip_horizontal = static_symmetry_contains(symmetry, D2h);
     out.flip_vertical = static_symmetry_contains(symmetry, D2v);
@@ -218,7 +269,7 @@ static Transformations static_symmetry_to_transforms(StaticSymmetry symmetry) {
     return out;
 }
 
-static StaticSymmetry transforms_to_static_symmetry(Transformations t) {
+StaticSymmetry transforms_to_static_symmetry(Transformations t) {
     bool iC2 = t.rotate_180;
     bool iC4 = t.rotate_left || t.rotate_right;
     bool iD2h = t.flip_horizontal;

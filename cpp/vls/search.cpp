@@ -2,43 +2,96 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <vector>
 
 #include "../base/base.cpp"
 #include "../base/search.cpp"
+#include "../base/solutions.cpp"
 #include "base.cpp"
 #include "implications.cpp"
 
 namespace vls {
 
 
-static std::vector<Variable*> get_search_order_list() {
+std::vector<Variable*> search_order_list;
+
+void get_search_order_list() {
     if (!ulp->options.search_order_list) {
         error("VLS backend requires a search order list");
     }
-    std::vector<Variable*> out;
+    search_order_list.clear();
     for (size_t i = 0; i < ulp->options.search_order_list_len; i++) {
         size_t* item = ulp->options.search_order_list[i];
-        Cell cell = ulp->grid.get(item[0], item[1], item[2]);
+        GridCell cell = ulp->grid.get(item[0], item[1], item[2]);
         Variable* var = ulp->vars[cell];
-        out.push_back(var);
+        search_order_list.push_back(var);
     }
-    return out;
 }
 
 
 static std::vector<int> progress;
 
-static void print_progress() {
-    
+void print_progress(FILE* stream) {
+    for (const int value : progress) {
+        real_fprintf(stream, "%i\n", value);
+    }
+}
+
+
+static Grid* max_partial = nullptr;
+static 
+
+static void max_partials_end(void) {
+    if (state.solutions_found == 0 && config.max_partials) {
+        printf("Max partial (score: %ju):\n", max_partial_score);
+        print_grid_pretty(&max_partial, false);
+    }
+    dg_destroy(&max_partial);
+}
+
+static void output_checking_function_run_this_on_every_branch(size_t depth) {
+    if (config.max_partials) {
+        if (state.solutions_found == 0) {
+            uintmax_t score;
+            if (config.max_partial_scoring == MAX_PARTIAL_SCORING_CELL) {
+                score = state.set_unknown_vars;
+            } else if (config.max_partial_scoring == MAX_PARTIAL_SCORING_DEPTH) {
+                score = depth;
+            } else {
+                unexpected_error("Invalid max partial scoring: %i", config.max_partial_scoring);
+            }
+            if (score > max_partial_score) {
+                dg_init_from_search_grid(&max_partial);
+                max_partial_score = score;
+            }
+        }
+    }
+    if (state.branches % CHECK_TIME_EVERY_THIS_MANY_BRANCHES == 0) {
+        double time = get_time();
+        if (time - last_progress_shown > config.reporting_interval) {
+            last_progress_shown = time;
+            printf("%ju second%s, %zu branch%s, %zu solution%s, progress: ", plural((uintmax_t)(time - start_time), "s"), plural(state.branches, "es"), plural(state.solutions_found, "s"));
+            print_progress(stdout);
+            real_printf("\n");
+        }
+        if (config.max_partials) {
+            if (state.solutions_found == 0 && time - last_printed_max_partial_time > config.max_partial_reporting_interval && max_partial_score > last_printed_max_partial_score) {
+                last_printed_max_partial_time = time;
+                last_printed_max_partial_score = max_partial_score;
+                printf("New max partial (score = %"PRIu64"):\n", max_partial_score);
+                print_grid_pretty(&max_partial, false);
+            }
+        }
+    }
 }
 
 
 bool all_zeros = true;
 
 // returns true if early exhausted, false if not
-static bool check_early_exhaustion(void) {
+bool check_early_exhaustion(void) {
     return false;
     // size_t t = config.start_padding;
     // // check columns
@@ -124,31 +177,23 @@ static bool check_early_exhaustion(void) {
     // }
 }
 
-
 // returns number of iterations to backjump
-static size_t run_depth(size_t depth, size_t search_order_pos) {
+size_t run_depth(size_t depth, size_t search_order_pos) {
     inc_debug_depth();
     debug(3,
-        printf("Running depth %zu: ", depth);
-        print_progress(stdout);
-        real_printf("\n");
-        if (cell == NULL) {
-            printf("Cell: <null pointer>\n");
+        if (search_order_pos >= search_order_list.size()) {
+            printf("Running depth %zu (variable <out of bounds>): ", depth);
         } else {
-            printf("Cell: variable = %zu\n", cell->var_number);
+            printf("Running depth %zu (variable %zu): ", depth, search_order_list[search_order_pos]->number);
         }
+        print_progress(stdout);
     );
     search->branches++;
-    // add 2 to account for off-by-one errors
-    if (depth > ulp->options.search_order_list_len + 2) {
-        unexpected_error("The dwarves delved too greedily and too deep");
-    }
-    if (search.set_unknown_vars >= search.start_unknown_vars || cell == NULL) {
-        check_solution(false);
+    if (search_order_pos >= search_order_list.size()) {
+        solutions::check(*search, false);
         dec_debug_depth();
         return 0;
     }
-    debug(3, print_grid(stdout));
     output_checking_function_run_this_on_every_branch(depth);
     if (cell->value != UNKNOWN) {
         debug(3, printf("Cell is known, continuing\n"));
@@ -192,11 +237,11 @@ static size_t run_depth(size_t depth, size_t search_order_pos) {
 }
 
 
-static void search(void) {
-    Cell* initial_cell = add_search_orders();
+void search(void) {
     debug(2, printf("Running search\n"));
     state.branches = 0;
     state.solutions_found = 0;
+    progress.clear();
     start_time = get_time();
     last_progress_shown = start_time;
     last_printed_max_partial_time = start_time;

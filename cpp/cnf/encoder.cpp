@@ -11,7 +11,7 @@
 namespace cnf {
     struct entry { unsigned x, y, n; };
 
-    std::vector<cube> make_primes(size_t n, const Cell* lut) {
+    std::vector<cube> make_primes(size_t n, const GridCell* lut) {
         std::vector<entry> t, s;
         std::vector<cube> res;
         for (unsigned i = 0; i < 1<<n; i++) {

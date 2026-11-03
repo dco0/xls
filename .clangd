@@ -7,7 +7,7 @@ CompileFlags:
         # linting disabling
         -Wno-unused-variable, -Wno-unused-function, -Wno-undefined-internal,
         # extension enabling
-        -Wno-c99-extensions, -Wno-gnu-empty-struct, -Wno-flexible-array-extensions, -Wno-vla-cxx-extension, -Wno-zero-length-array
+        -Wno-gnu-empty-struct, -Wno-zero-length-array, -Wno-c99-extensions, -Wno-flexible-array-extensions, -Wno-vla-cxx-extension
     ]
 
 Diagnostics:
