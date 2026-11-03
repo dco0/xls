@@ -39,7 +39,7 @@ struct ULP {
         enum class Backend {CNF, VLS};
         Backend backend;
 
-        size_t search_order_list_len;
+        size_t search_order_list_len = 0;
         // format: t, x, y
         size_t (*search_order_list)[3] = nullptr;
 
@@ -47,6 +47,7 @@ struct ULP {
         uintmax_t periodic_dx = 0;
         uintmax_t periodic_dy = 0;
         uintmax_t periodic_period = 0;
+        bool check_early_exhaustion = false;
 
         char* after_rule_text = nullptr;
 
@@ -87,7 +88,11 @@ struct ULP {
         }
     }
 
-    const Cell* get_rule_func() const {
+    inline bool gc_is_var(GridCell cell) const {
+        return cell >= max_states;
+    }
+
+    const GridCell* get_rule_func() const {
         ClauseFunc* func = funcs[rule_func_index];
         if (func->var_count != 10) {
             error("Rule function must have 10 inputs");
@@ -95,18 +100,18 @@ struct ULP {
         if (func->type != ClauseFuncType::LOOKUP_TABLE) {
             error("Rule function must be a lookup table");
         }
-        return const_cast<const Cell*>(func->data.lookup_table.table);
+        return const_cast<const GridCell*>(func->data.lookup_table.table);
     }
 
     void sync_search_grid() {
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t y = 0; y < grid.height; y++) {
                 for (size_t x = 0; x < grid.width; x++) {
-                    Cell value = grid.get(t, x, y);
-                    if (c_is_var(value)) {
+                    GridCell value = grid.get(t, x, y);
+                    if (gc_is_var(value)) {
                         Variable* var = vars[value];
                         if (var->value != V_UNKNOWN) {
-                            grid.set(t, x, y, varvalue_to_cell(var->value));
+                            grid.set(t, x, y, vv_to_gc(var->value));
                         }
                     }
                 }
@@ -326,11 +331,11 @@ private:
                 }
                 if (check(" lookup_table")) {
                     size_t len = 1UZ << var_count;
-                    ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(Cell));
+                    ClauseFunc* func = (ClauseFunc*)safe_malloc(sizeof(ClauseFunc) + len * sizeof(GridCell));
                     func->type = ClauseFuncType::LOOKUP_TABLE;
                     func->var_count = var_count;
                     for (size_t i = 0; i < len; i++) {
-                        Cell value;
+                        GridCell value;
                         if (!check(" %zu", &value)) {
                             ulp_error("Lookup table entry %zu for clause func %zu is missing or invalid", value, i);
                         }
@@ -448,7 +453,7 @@ private:
                 ulp_error("Grid size vs grid data list size mismatch (true size is %zu, given size is %zu)", out.grid.total_size, v_size);
             }
             for (size_t i = 0; i < out.grid.total_size; i++) {
-                Cell value;
+                GridCell value;
                 if (!check(" %zu", &value)) {
                     ulp_error("Grid item at index %zu is missing or invalid", i);
                 }

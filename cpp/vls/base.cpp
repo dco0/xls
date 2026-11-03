@@ -8,9 +8,21 @@
 #include <stdio.h>
 
 #include "../base/base.cpp"
+#include "../base/ulp.cpp"
+#include "../base/search.cpp"
 
 
 namespace vls {
+
+
+[[maybe_unused]] static Search* search = nullptr;
+
+[[maybe_unused]] static ULP* ulp = nullptr;
+
+void load_search(Search& search) {
+    vls::search = &search;
+    vls::ulp = &(search.ulp);
+}
 
 
 // forward declarations
@@ -193,7 +205,6 @@ public:
 
 
 Stack current_stack;
-
 
 // returns false if contradiction, true if no contradiction
 static inline bool set_variable_and_push(Variable& var, VarValue value, bool is_explicit) {

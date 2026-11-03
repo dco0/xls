@@ -11,7 +11,7 @@
 #include "../base/ulp.cpp"
 #include "../base/rule.cpp"
 #include "../base/solutions.cpp"
-#include "stack.cpp"
+#include "base.cpp"
 #include "implications.cpp"
 
 
@@ -251,7 +251,7 @@ private:
             Variable& var = *ulp.vars[i];
             // if the cell has a known value then set it to the corresponding cell
             if (var.value != V_UNKNOWN) {
-                alias_variable(var, *ulp.vars[varvalue_to_cell(var.value)]);
+                alias_variable(var, *ulp.vars[vv_to_gc(var.value)]);
                 continue;
             }
             // see if we can combine together any uses
@@ -298,19 +298,19 @@ private:
             if (var.value != V_UNKNOWN) {
                 continue;
             }
-            bool can_be_0 = internal_check_implications(var, cell_to_varvalue(0));
-            bool can_be_1 = internal_check_implications(var, cell_to_varvalue(1));
+            bool can_be_0 = internal_check_implications(var, gc_to_vv(0));
+            bool can_be_1 = internal_check_implications(var, gc_to_vv(1));
             debug(2, printf("Implications for variable %zu: can_be_0 = %i, can_be_1 = %i\n", var.number, can_be_0, can_be_1));
             if (!can_be_0 && !can_be_1) {
                 contradiction("Variable %zu is unsettable", var.value);
             } else if (!can_be_0 && can_be_1) {
                 changes_made = true;
-                set_variable_and_propagate(var, cell_to_varvalue(0), true);
+                set_variable_and_propagate(var, gc_to_vv(0), true);
                 // reset the stack length to fix dangling pointers caused by set_variable and save space
                 current_stack.len = 0;
             } else if (can_be_0 && !can_be_1) {
                 changes_made = true;
-                set_variable_and_propagate(var, cell_to_varvalue(0), true);
+                set_variable_and_propagate(var, gc_to_vv(0), true);
                 // reset the stack length to fix dangling pointers caused by set_variable and save space
                 current_stack.len = 0;
             } else {

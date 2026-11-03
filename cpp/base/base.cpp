@@ -95,27 +95,21 @@ static void safe_free(void* ptr) {
 
 constexpr const ptrdiff_t POWERS_OF_3[16] = {1Z, 3Z, 9Z, 27Z, 81Z, 243Z, 729Z, 2187Z, 6561Z, 19683Z, 59049Z, 177147Z, 531441Z, 1594323Z, 4782969Z, 14348907Z};
 
-typedef size_t Cell;
-constexpr Cell C_OFF = 0;
-constexpr Cell C_ON = 1;
-
-[[gnu::always_inline]] static inline bool c_is_var(Cell cell) {
-    return cell > 1;
-}
+typedef size_t GridCell;
 
 typedef uint8_t VarValue;
 constexpr const VarValue V_UNKNOWN = 0;
 
-[[gnu::always_inline]] static inline VarValue cell_to_varvalue(Cell cell) {
+[[gnu::always_inline]] static inline VarValue gc_to_vv(GridCell cell) {
     return (VarValue)(cell + 1);
 }
 
-[[gnu::always_inline]] static inline Cell varvalue_to_cell(VarValue value) {
+[[gnu::always_inline]] static inline GridCell vv_to_gc(VarValue value) {
     return value - 1;
 }
 
 struct LookupTableClauseFunc {
-    Cell table[];
+    GridCell table[];
 };
 
 enum class ClauseFuncType : uint8_t {

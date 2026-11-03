@@ -16,7 +16,7 @@ class Grid {
 
 private:
 
-    inline static std::unordered_map<size_t, std::vector<Cell*>> free_lists;
+    inline static std::unordered_map<size_t, std::vector<GridCell*>> free_lists;
     inline static std::unordered_map<size_t, size_t> allocation_counts;
     inline static size_t current_allocated_bytes = 0UZ;
 
@@ -44,7 +44,7 @@ private:
         for (const auto& c : candidates) {
             auto& list = free_lists[c.size];
             while (!list.empty() && current_allocated_bytes > target_bytes) {
-                Cell* ptr = list.back();
+                GridCell* ptr = list.back();
                 list.pop_back();
                 safe_free(ptr);
                 current_allocated_bytes -= c.size;
@@ -58,11 +58,11 @@ private:
         }
     }
 
-    static Cell* allocate_cells(size_t size) {
+    static GridCell* allocate_cells(size_t size) {
         allocation_counts[size]++;
         auto& list = free_lists[size];
         if (!list.empty()) {
-            Cell* ptr = list.back();
+            GridCell* ptr = list.back();
             list.pop_back();
             return ptr;
         } else {
@@ -70,11 +70,11 @@ private:
             if (current_allocated_bytes > GRID_CACHE_MAX_MEMORY) {
 
             }
-            return (Cell*)safe_malloc(size * sizeof(Cell));
+            return (GridCell*)safe_malloc(size * sizeof(GridCell));
         }
     }
 
-    static void deallocate_cells(Cell* ptr, size_t size) {
+    static void deallocate_cells(GridCell* ptr, size_t size) {
         if (ptr == nullptr) {
             return;
         }
@@ -93,7 +93,7 @@ public:
 
     static void destroy() {
         for (const auto& [_, list] : free_lists) {
-            for (Cell* ptr : list) {
+            for (GridCell* ptr : list) {
                 safe_free(ptr);
             }
         }
@@ -105,7 +105,7 @@ public:
     size_t height;
     size_t gens;
     size_t total_size;
-    Cell* data;
+    GridCell* data;
 
     Grid(size_t width, size_t height, size_t gens) {
         this->width = width;
@@ -119,11 +119,15 @@ public:
         deallocate_cells(data, total_size);
     }
 
-    Cell get(size_t t, size_t x, size_t y) const {
+    bool is_in_bounds(size_t t, size_t x, size_t y) const {
+        return t < this->gens && x < this->width && y < this->height;
+    }
+
+    GridCell get(size_t t, size_t x, size_t y) const {
         return data[((t * height) + y) * width + x];
     }
 
-    void set(size_t t, size_t x, size_t y, Cell value) {
+    void set(size_t t, size_t x, size_t y, GridCell value) {
         data[((t * height) + y) * width + x] = value;
     }
 
@@ -141,7 +145,7 @@ public:
 
     Grid copy() const {
         Grid out = Grid(width, height, gens);
-        memcpy(out.data, data, total_size * sizeof(Cell));
+        memcpy(out.data, data, total_size * sizeof(GridCell));
         return out;
     }
 
@@ -267,7 +271,7 @@ public:
             bool found = false;
             for (size_t x = 0; x < width; x++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y) != C_OFF) {
+                    if (get(t, x, y) != 0) {
                         found = true;
                         break;
                     }
@@ -287,7 +291,7 @@ public:
             bool found = false;
             for (size_t x = 0; x < width; x++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y - 1) != C_OFF) {
+                    if (get(t, x, y - 1) != 0) {
                         found = true;
                         break;
                     }
@@ -307,7 +311,7 @@ public:
             bool found = false;
             for (size_t y = 0; y < height; y++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y) != C_OFF) {
+                    if (get(t, x, y) != 0) {
                         found = true;
                         break;
                     }
@@ -327,7 +331,7 @@ public:
             bool found = false;
             for (size_t y = 0; y < height; y++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x - 1, y) != C_OFF) {
+                    if (get(t, x - 1, y) != 0) {
                         found = true;
                         break;
                     }

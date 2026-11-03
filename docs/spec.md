@@ -66,6 +66,7 @@ Possible options:
 * `backend = <string>` - Sets the backend to use, currently the only options are `cnf` and `vls`.
 * `search_order_list:` - This list contains the fixed search order (only if the backend supports it), as a list of coordinates like `1 2 3` which specifies the cell at t = 1, x = 2, and y = 3.
 * `periodic = (dx, dy)c/(period)` - Provided if a periodic pattern is being searched for, changes duplicate solution detection and early exhaustion stuff.
+* `check_early_exhaustion = <boolean>` - Enable early exhaustion checking (like LLSSS `--filters bcaf`), it's disabled by default.
 * `after_rule_text = <string>` - Sets text to be displayed after the rule, such as `:T20,20`
 * `show_solutions = <boolean>` - Set whether solutions are shown
 * `max_solutions = <integer>` - Set the maximum number of solutions to show, it will exit early once it reaches that point

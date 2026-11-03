@@ -16,6 +16,25 @@
 #include "rule.cpp"
 
 
+static inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
+    const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    if (ulp.max_states >= 3) {
+        if (!ulp.gc_is_var(value)) {
+            real_printf("%c", RLE_CHARS[value]);
+        } else {
+            real_printf("%c", RLE_CHARS[ulp.max_states]);
+        }
+    } else {
+        if (value == 0) {
+            real_printf(".");
+        } else if (value == 1) {
+            real_printf("o");
+        } else {
+            real_printf("B");
+        }
+    }
+}
+
 static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
     std::string rule = rule::get(ulp, false);
     if (ulp.multi_rule) {
@@ -31,7 +50,7 @@ static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t y = 0; y < grid.height; y++) {
                 for (size_t x = 0; x < grid.width; x++) {
-                    if (c_is_var(grid.get(t, x, y))) {
+                    if (ulp.gc_is_var(grid.get(t, x, y))) {
                         found = true;
                         break;
                     }
@@ -50,12 +69,8 @@ static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution
             for (size_t y = 0; y < grid.height; y++) {
                 print_line_padding();
                 for (size_t x = 0; x < grid.width; x++) {
-                    Cell value = grid.get(0, x, y);
-                    if (value == C_ON) {
-                        real_printf("o");
-                    } else {
-                        real_printf(".");
-                    }
+                    GridCell value = grid.get(0, x, y);
+                    print_grid_cell_pretty(ulp, value);
                 }
                 if (y == grid.height - 1) {
                     real_printf(" !\n");
@@ -72,14 +87,8 @@ static void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution
         print_line_padding();
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t x = 0; x < grid.width; x++) {
-                Cell value = grid.get(t, x, y);
-                if (value == C_OFF) {
-                    real_printf(".");
-                } else if (value == C_ON) {
-                    real_printf("o");
-                } else {
-                    real_printf("B");
-                }
+                GridCell value = grid.get(t, x, y);
+                print_grid_cell_pretty(ulp, value);
             }
             if (t != grid.gens - 1) {
                 real_printf(" .|. ");
@@ -179,7 +188,7 @@ static Hash hash_all_times(const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
-                Cell value = grid.get(t, x, y);
+                GridCell value = grid.get(t, x, y);
                 update_hash(out, value);
             }
         }
@@ -209,7 +218,7 @@ static Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid
         update_hash(out, y_offset);
         for (size_t y = 0; y < shrink_height; y++) {
             for (size_t x = 0; x < shrink_width; x++) {
-                Cell value = t_grid.get(0, x + offsets.left, y + offsets.top);
+                GridCell value = t_grid.get(0, x + offsets.left, y + offsets.top);
                 update_hash(out, value);
             }
         }
@@ -270,7 +279,7 @@ static bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
-                if (grid.get(t, x, y) != cell_to_varvalue(0)) {
+                if (grid.get(t, x, y) != 0) {
                     return false;
                 }
             }

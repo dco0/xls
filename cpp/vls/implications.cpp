@@ -9,14 +9,10 @@
 
 #include "../base/base.cpp"
 #include "../base/ulp.cpp"
-#include "../base/search.cpp"
-#include "stack.cpp"
+#include "base.cpp"
 
 
 namespace vls {
-
-
-static Search* search;
 
 
 typedef uint64_t ImplicState[16];
@@ -67,7 +63,7 @@ static inline void implicstate_and(ImplicState x, const ImplicState y) {
 }
 
 static void init_implicstate_masks(const ULP& ulp) {
-    const Cell* rule_func = ulp.get_rule_func();
+    const GridCell* rule_func = ulp.get_rule_func();
     for (int i = 0; i < 1024; i++) {
         if (rule_func[i] == 0) {
             implicstate_set_bit(full_implic_state, i, 0);
@@ -82,7 +78,7 @@ static void init_implicstate_masks(const ULP& ulp) {
             IMPLICSTATE_CELL_MASKS[pos][0][i] = UINT64_MAX;
         }
         for (int i = 0; i < 1024; i++) {
-            implicstate_set_bit(IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue((i >> pos) & 1)], i, 1);
+            implicstate_set_bit(IMPLICSTATE_CELL_MASKS[pos][gc_to_vv((i >> pos) & 1)], i, 1);
         }
     }
     for (int pos1 = 0; pos1 < 10; pos1++) {
@@ -135,8 +131,8 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
     implicstate_and(state, IMPLICSTATE_CELL_MASKS[9][nw]);
     uint64_t out = 0;
     for (int pos = 0; pos < 10; pos++) {
-        uint64_t* mask_0 = IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue(0)];
-        uint64_t* mask_1 = IMPLICSTATE_CELL_MASKS[pos][cell_to_varvalue(1)];
+        uint64_t* mask_0 = IMPLICSTATE_CELL_MASKS[pos][gc_to_vv(0)];
+        uint64_t* mask_1 = IMPLICSTATE_CELL_MASKS[pos][gc_to_vv(1)];
         uint64_t any_can_be_0 = 0;
         uint64_t any_can_be_1 = 0;
         for (int i = 0; i < 16; i++) {
@@ -151,12 +147,12 @@ static uint64_t get_implications_for_tr(uint32_t tr) {
         } else if (!can_be_0 && can_be_1) {
             if (cells[pos] == V_UNKNOWN) {
                 out <<= 6;
-                out |= (cell_to_varvalue(1) << 4) | pos;
+                out |= (gc_to_vv(1) << 4) | pos;
             }
         } else if (can_be_0 && !can_be_1) {
             if (cells[pos] == V_UNKNOWN) {
                 out <<= 6;
-                out |= (cell_to_varvalue(0) << 4) | pos;
+                out |= (gc_to_vv(0) << 4) | pos;
             }
         } else {
             // do nothing
@@ -192,7 +188,7 @@ static void destroy_implications() {
 static bool set_variable(Variable* var, VarValue value) {
     debug(4, printf("Setting variable %zu, value = %i, prev_value = %i\n", var->number, value, var->value));
     var->value = value;
-    if (value == cell_to_varvalue(0)) {
+    if (value == gc_to_vv(0)) {
         for (size_t i = 0; i < var->use_count; i++) {
             VarUse* data = &(var->uses[i]);
             data->clause->implication_pointer += data->change;
@@ -209,7 +205,7 @@ static bool set_variable(Variable* var, VarValue value) {
 
 static void unset_variable(Variable* var) {
     debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var->number, var->value));
-    if (var->value == cell_to_varvalue(0)) {
+    if (var->value == gc_to_vv(0)) {
         for (size_t i = 0; i < var->use_count; i++) {
             VarUse* data = &(var->uses[i]);
             data->clause->implication_pointer -= data->change;
