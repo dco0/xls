@@ -2,7 +2,10 @@
 CNF backend
 
 VLS backend:
-* preprocessing: remove always SAT clauses
+* preprocessing: check every assignment of variables in every clause and look for forced assignments or aliases, also remove clauses which can't assign anything
+* preprocessing: custom set_cell_and_propagate that also does aliases in `vls::Preprocessor::check_variable_implications`
+* preprocessing: run every possible search order up to some depth
+* add inprocessing somehow??? requires redesigning ULP to allow copies...
 
 Scripting:
 * for mut
