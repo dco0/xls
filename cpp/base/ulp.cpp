@@ -36,6 +36,13 @@ struct ULP {
 
     struct Options {
 
+        enum class Backend {CNF, VLS};
+        Backend backend;
+
+        size_t search_order_list_len;
+        // format: t, x, y
+        size_t (*search_order_list)[3] = nullptr;
+
         bool periodic = false;
         uintmax_t periodic_dx = 0;
         uintmax_t periodic_dy = 0;
@@ -47,6 +54,9 @@ struct ULP {
         std::optional<uintmax_t> max_solutions = std::nullopt;
 
         ~Options() {
+            if (search_order_list != nullptr) {
+                safe_free(search_order_list);
+            }
             if (after_rule_text != nullptr) {
                 safe_free(after_rule_text);
             }
@@ -322,7 +332,7 @@ private:
                     for (size_t i = 0; i < len; i++) {
                         Cell value;
                         if (!check(" %zu", &value)) {
-                            ulp_error("Lookup table entry %zu missing for clause func %zu", value, i);
+                            ulp_error("Lookup table entry %zu for clause func %zu is missing or invalid", value, i);
                         }
                         func->data.lookup_table.table[i] = value;
                     }
@@ -354,7 +364,7 @@ private:
                 for (size_t j = 0; j < vars; j++) {
                     size_t value;
                     if (!check(" %zu", &value)) {
-                        ulp_error("Variable %zu missing for clause %zu", j, i);
+                        ulp_error("Variable %zu for clause %zu is missing or invalid", j, i);
                     }
                     // fine because it will initialize it to 0 if it doesn't exist
                     use_counts[value]++;
@@ -398,7 +408,7 @@ private:
                 for (size_t j = 0; j < var_count; j++) {
                     size_t var_number;
                     if (!check(" %zu", &var_number)) {
-                        ulp_error("Variable %zu missing for clause %zu", j, i);
+                        ulp_error("Variable %zu for clause %zu is missing or invalid", j, i);
                     }
                     Variable* var = out.vars[var_number];
                     clause->vars[i] = var;
@@ -440,7 +450,7 @@ private:
             for (size_t i = 0; i < out.grid.total_size; i++) {
                 Cell value;
                 if (!check(" %zu", &value)) {
-                    ulp_error("Missing grid item at index %zu", i);
+                    ulp_error("Grid item at index %zu is missing or invalid", i);
                 }
                 out.grid.data[i] = value;
             }
@@ -457,7 +467,29 @@ private:
         size_t v_size_3;
         uintmax_t v_uintmax;
         char v_str[256];
-        if (check_line("periodic = ( %zu , %zu ) c / %zu", &v_size, &v_size_2, &v_size_3)) {
+        if (check_line("backend = %255s", v_str)) {
+            if (strcmp(v_str, "cnf") == 0) {
+                options.backend = ULP::Options::Backend::CNF;
+            } else if (strcmp(v_str, "vls") == 0) {
+                options.backend = ULP::Options::Backend::VLS;
+            } else {
+                ulp_error("Invalid backend: '%s'", v_str);
+            }
+        } else if (check_line("search_order_list : %zu", &v_size)) {
+            size_t len = v_size;
+            options.search_order_list_len = len;
+            // realloc behaves like malloc for null pointers
+            options.search_order_list = (size_t(*)[3])safe_realloc(options.search_order_list, len * 3 * sizeof(size_t));
+            for (size_t i = 0; i < len; i++) {
+                if (!check_line("%zu %zu %zu", &v_size, &v_size_2, &v_size_3)) {
+                    ulp_error("Search order list item %zu is missing or invalid", i);
+                }
+                size_t* item = options.search_order_list[i];
+                item[0] = v_size;
+                item[1] = v_size_2;
+                item[2] = v_size_3;
+            }
+        } else if (check_line("periodic = ( %zu , %zu ) c / %zu", &v_size, &v_size_2, &v_size_3)) {
             options.periodic = true;
             options.periodic_dx = v_size;
             options.periodic_dy = v_size_2;
@@ -478,7 +510,7 @@ private:
 public:    
 
     void parse() {
-        enum { NONE, GRAPH, GRID, OPTIONS } section = NONE;
+        enum {NONE, GRAPH, GRID, OPTIONS} section = NONE;
         while (true) {
             if (!eat_whitespace()) {
                 break;
