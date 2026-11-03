@@ -46,6 +46,12 @@ struct ULP {
         bool show_solutions = true;
         std::optional<uintmax_t> max_solutions = std::nullopt;
 
+        ~Options() {
+            if (after_rule_text != nullptr) {
+                safe_free(after_rule_text);
+            }
+        }
+
     };
 
     Options options;
@@ -68,9 +74,6 @@ struct ULP {
                 safe_free(clauses[i]);
             }
             safe_free(clauses);
-        }
-        if (options.after_rule_text != nullptr) {
-            safe_free(options.after_rule_text);
         }
     }
 
