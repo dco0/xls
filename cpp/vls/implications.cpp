@@ -241,7 +241,6 @@ inline bool check_clause_implications(Clause& clause) {
     debug(4, printf("Implication for clause %zu: transition = %ti, code = %" PRIu64 "\n", clause.number, clause.implication_pointer - implication_table, code));
     if (code == 1) {
         debug(3, printf("Contradiction in check_implications\n"));
-        search->print_grid(stdout);
         return false;
     }
     while (code != 0) {
