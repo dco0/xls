@@ -125,7 +125,7 @@ const INTSpec hex_int = {
 };
 
 void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_value) {
-    const GridCell* table = ulp.get_rule_func();
+    const GridCell* table = ulp.graph->get_rule_func();
     for (int i = 0; i < 512; i++) {
         int j = (i & 273) | ((i >> 2) & 34) | ((i >> 4) & 4) | ((i << 2) & 136) | ((i << 4) & 64);
         GridCell zero = table[(j << 1) | 0];
@@ -329,7 +329,7 @@ std::string get(const ULP& ulp, bool use_maxrule) {
 
 
 Transformations get_identity_transforms(const ULP& ulp) {
-    const GridCell* func = ulp.get_rule_func();
+    const GridCell* func = ulp.graph->get_rule_func();
     Transformations out;
     // rotation symmetries
     bool C2 = true;

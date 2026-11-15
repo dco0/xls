@@ -20,13 +20,13 @@ extern int nanosleep(const struct timespec *__requested_time, struct timespec *_
 #include "rule.cpp"
 
 
-inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
+inline void print_grid_cell_pretty(const Graph& graph, GridCell value) {
     static const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    if (ulp.max_states >= 3) {
-        if (!ulp.gc_is_var(value)) {
+    if (graph.max_states >= 3) {
+        if (!graph.gc_is_var(value)) {
             real_printf("%c", RLE_CHARS[value]);
         } else {
-            real_printf("%c", RLE_CHARS[ulp.max_states]);
+            real_printf("%c", RLE_CHARS[graph.max_states]);
         }
     } else {
         if (value == 0) {
@@ -40,8 +40,9 @@ inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
 }
 
 void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
+    const Graph& graph = *ulp.graph;
     std::string rule = rule::get(ulp, false);
-    if (ulp.multi_rule) {
+    if (ulp.graph->is_multi_rule()) {
         std::string maxrule = rule::get(ulp, true);
         if (rule != maxrule) {
             printf("#C %s to %s\n", rule.c_str(), maxrule.c_str());
@@ -54,7 +55,7 @@ void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t y = 0; y < grid.height; y++) {
                 for (size_t x = 0; x < grid.width; x++) {
-                    if (ulp.gc_is_var(grid[t, x, y])) {
+                    if (graph.gc_is_var(grid[t, x, y])) {
                         found = true;
                         break;
                     }
@@ -74,7 +75,7 @@ void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
                 print_line_padding();
                 for (size_t x = 0; x < grid.width; x++) {
                     GridCell value = grid[0, x, y];
-                    print_grid_cell_pretty(ulp, value);
+                    print_grid_cell_pretty(graph, value);
                 }
                 if (y == grid.height - 1) {
                     real_printf(" !\n");
@@ -92,7 +93,7 @@ void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t x = 0; x < grid.width; x++) {
                 GridCell value = grid[t, x, y];
-                print_grid_cell_pretty(ulp, value);
+                print_grid_cell_pretty(graph, value);
             }
             if (t != grid.gens - 1) {
                 real_printf(" .|. ");
@@ -110,7 +111,7 @@ void print_grid_pretty(const ULP& ulp, const Grid& grid, bool is_solution) {
 struct Search {
 
     ULP ulp;
-    Options& options;
+    Options options;
 
     size_t start_unknown_vars = 0;
     size_t set_unknown_vars = 0;
@@ -126,7 +127,7 @@ struct Search {
     double last_progress_shown_time = 0;
     double last_max_partial_shown_time = 0;
 
-    Search(Options& options) : ulp(options), options(options) {
+    Search(Graph* graph) : ulp(graph, options) {
         // do nothing
     }
 
@@ -170,7 +171,8 @@ public:
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t y = 0; y < grid.height; y++) {
                 for (size_t x = 0; x < grid.width; x++) {
-                    var_to_string(str, *ulp.vars[grid[t, x, y]]);
+                    Variable* var = ulp.graph->vars[grid[t, x, y]];
+                    var_to_string(str, *var);
                     int len = strlen(str);
                     if (len > max_len) {
                         max_len = len;
@@ -186,7 +188,8 @@ public:
                 fprint_line_padding(stream);
                 for (size_t x = 0; x < grid.width; x++) {
                     memset(str, '\0', 256);
-                    var_to_string(str, *ulp.vars[grid[t, x, y]]);
+                    Variable* var = ulp.graph->vars[grid[t, x, y]];
+                    var_to_string(str, *var);
                     real_fprintf(stream, "%-*s", field_size, str);
                 }
                 real_fprintf(stream, "$\n");

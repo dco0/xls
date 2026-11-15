@@ -48,7 +48,7 @@ namespace cnf::cf {
     ClauseFunc::ClauseFunc(::ULP* ulp, ::ClauseFunc* cf) : cf(cf) {
         switch (cf->type) {
             case (::ClauseFunc::Type::LOOKUP_TABLE):
-                if (ulp->max_states != 2) error("not implemented");
+                if (ulp->graph->max_states != 2) error("not implemented");
                 impl.binary_lut = new BinaryLut{ulp, cf};
                 type = Type::BINARY_LUT;
                 break;

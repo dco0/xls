@@ -17,11 +17,13 @@ namespace vls {
 
 [[maybe_unused]] static Search* search = nullptr;
 [[maybe_unused]] static ULP* ulp = nullptr;
+[[maybe_unused]] static Graph* graph = nullptr;
 [[maybe_unused]] static Options* options = nullptr;
 
 void load_search(Search& search) {
     vls::search = &search;
     vls::ulp = &(search.ulp);
+    vls::graph = search.ulp.graph;
     vls::options = &(search.options);
 }
 

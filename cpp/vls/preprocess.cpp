@@ -144,10 +144,11 @@ class Preprocessor {
 private:
 
     ULP& ulp;
+    Graph& graph;
 
 public:
 
-    Preprocessor(ULP& ulp) : ulp(ulp) {
+    Preprocessor(ULP& ulp) : ulp(ulp), graph(*ulp.graph) {
         // do nothing
     }
 
@@ -192,8 +193,8 @@ private:
             }
             ulp.grid.data[i] = cell;
         }
-        for (size_t i = 0; i < ulp.clause_count; i++) {
-            Clause& clause = *ulp.clauses[i];
+        for (size_t i = 0; i < graph.clause_count; i++) {
+            Clause& clause = *graph.clauses[i];
             for (size_t i = 0; i < clause.var_count; i++) {
                 if (clause.vars[i] == &var) {
                     clause.vars[i] = &alias_to;
@@ -201,16 +202,16 @@ private:
             }
             init_clause_implication_tr(clause);
         }
-        for (size_t i = var.number; i < ulp.var_count - 1; i++) {
-            ulp.vars[i] = ulp.vars[i + 1];
-            ulp.vars[i]->number--;
+        for (size_t i = var.number; i < graph.var_count - 1; i++) {
+            graph.vars[i] = graph.vars[i + 1];
+            graph.vars[i]->number--;
         }
         safe_free(&var);
-        ulp.var_count--;
+        graph.var_count--;
     }
 
     void alias_variable(Variable& var, Variable& alias_to) {
-        if (alias_to.number < ulp.max_states) {
+        if (alias_to.number < graph.max_states) {
             _alias_variable_to_known(var, alias_to);
             return;
         }
@@ -239,8 +240,8 @@ private:
             }
             ulp.grid.data[i] = cell;
         }
-        for (size_t i = 0; i < ulp.clause_count; i++) {
-            Clause& clause = *ulp.clauses[i];
+        for (size_t i = 0; i < graph.clause_count; i++) {
+            Clause& clause = *graph.clauses[i];
             for (size_t j = 0; j < clause.var_count; j++) {
                 if (clause.vars[j] == &var || clause.vars[j] == &alias_to) {
                     clause.vars[j] = new_var;
@@ -248,13 +249,13 @@ private:
             }
             init_clause_implication_tr(clause);
         }
-        ulp.vars[var.number] = new_var;
+        graph.vars[var.number] = new_var;
         safe_free(&var);
-        for (size_t i = alias_to.number; i < ulp.var_count - 1; i++) {
-            ulp.vars[i] = ulp.vars[i + 1];
-            ulp.vars[i]->number--;
+        for (size_t i = alias_to.number; i < graph.var_count - 1; i++) {
+            graph.vars[i] = graph.vars[i + 1];
+            graph.vars[i]->number--;
         }
-        ulp.var_count--;
+        graph.var_count--;
         safe_free(&alias_to);
     }
 
@@ -277,11 +278,11 @@ private:
                 }
             }
         }
-        for (size_t i = clause.number; i < ulp.clause_count - 1; i++) {
-            ulp.clauses[i] = ulp.clauses[i + 1];
-            ulp.clauses[i]->number--;
+        for (size_t i = clause.number; i < graph.clause_count - 1; i++) {
+            graph.clauses[i] = graph.clauses[i + 1];
+            graph.clauses[i]->number--;
         }
-        ulp.clause_count--;
+        graph.clause_count--;
         safe_free(&clause);
     }
 
@@ -289,11 +290,11 @@ private:
         start_step();
         // runs several normalization steps
         // start at max_states to avoid running on the known vars
-        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
-            Variable& var = *ulp.vars[i];
+        for (size_t i = graph.max_states; i < graph.var_count; i++) {
+            Variable& var = *graph.vars[i];
             // if the cell has a known value then set it to the corresponding cell
             if (var.value != VV_UNKNOWN) {
-                alias_variable(var, *ulp.vars[vv_to_gc(var.value)]);
+                alias_variable(var, *graph.vars[vv_to_gc(var.value)]);
                 continue;
             }
             // see if we can combine together any uses
@@ -335,8 +336,8 @@ private:
         // go through each cell and try setting it to a value
         // if it's a contradiction, then it must be the OTHER value
         // so we can set it to that!
-        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
-            Variable& var = *ulp.vars[i];
+        for (size_t i = graph.max_states; i < graph.var_count; i++) {
+            Variable& var = *graph.vars[i];
             if (var.value != VV_UNKNOWN) {
                 continue;
             }
@@ -366,10 +367,10 @@ private:
         start_step();
         // if 2 variables have exactly the same arrangement of clauses
         // then alias them together
-        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
-            Variable& x = *ulp.vars[i];
-            for (size_t j = ulp.max_states; j < i; j++) {
-                Variable& y = *ulp.vars[j];
+        for (size_t i = graph.max_states; i < graph.var_count; i++) {
+            Variable& x = *graph.vars[i];
+            for (size_t j = graph.max_states; j < i; j++) {
+                Variable& y = *graph.vars[j];
                 if (x.use_count != y.use_count) {
                     continue;
                 }
@@ -393,8 +394,8 @@ private:
     void remove_known_clauses() {
         start_step();
         // removes all clauses that are fully made of known cells
-        for (size_t i = 0; i < ulp.clause_count; i++) {
-            Clause& clause = *ulp.clauses[i];
+        for (size_t i = 0; i < graph.clause_count; i++) {
+            Clause& clause = *graph.clauses[i];
             bool found = false;
             for (size_t j = 0; j < clause.var_count; j++) {
                 if (clause.vars[j]->is_unknown()) {
@@ -423,10 +424,10 @@ private:
         // which means that the next cells can be aliased together!
         // when this happens the next pass will take care of merging the clauses
         Transformations valid = rule::get_identity_transforms(ulp);
-        for (size_t i = 0; i < ulp.clause_count; i++) {
-            PreClause x = PreClause(*ulp.clauses[i]);
+        for (size_t i = 0; i < graph.clause_count; i++) {
+            PreClause x = PreClause(*graph.clauses[i]);
             for (size_t j = 0; j < i; j++) {
-                PreClause y = PreClause(*ulp.clauses[j]);
+                PreClause y = PreClause(*graph.clauses[j]);
                 // no transformation
                 if (x == y) {
                     debug(2, printf("Match found: clause %zu is equal to clause %zu with no transformation\n", x.get_number(), y.get_number()));
@@ -497,7 +498,7 @@ public:
         if (!found) {
             unexpected_error("Preprocessing did not finish");
         }
-        if (ulp.var_count <= ulp.max_states) {
+        if (graph.var_count <= graph.max_states) {
             solutions::check(*search, true);
             return true;
         }

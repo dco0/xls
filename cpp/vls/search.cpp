@@ -26,7 +26,7 @@ void get_search_order_list() {
     for (size_t i = 0; i < options->search_order_list_len; i++) {
         size_t* item = options->search_order_list[i];
         GridCell cell = ulp->grid[item[0], item[1], item[2]];
-        Variable* var = ulp->vars[cell];
+        Variable* var = graph->vars[cell];
         search_order_list.push_back(var);
     }
 }
@@ -195,7 +195,7 @@ size_t run_depth(size_t depth) {
             return out - 1;
         }
         all_zeros = prev_all_zeros;
-        value = gc_to_vv((vv_to_gc(value) + 1) % ulp->max_states);
+        value = gc_to_vv((vv_to_gc(value) + 1) % graph->max_states);
     }
     dec_debug_depth();
     return 0;

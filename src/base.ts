@@ -805,9 +805,9 @@ export class ULP {
     toString(): string {
         return [
             ``,
-            `max_states = ${this.maxStates}`,
-            ``,
             `[GRAPH]`,
+            ``,
+            `max_states = ${this.maxStates}`,
             ``,
             `var_count = ${this.varCount + this.maxStates}`,
             ``,

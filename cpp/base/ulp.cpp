@@ -16,10 +16,75 @@
 #include "grid.cpp"
 
 
+class Graph {
+
+public:
+
+    uint64_t max_states = 0;
+
+    size_t var_count = 0;
+    Variable** vars = nullptr;
+
+    size_t func_count = 0;
+    ClauseFunc** funcs = nullptr;
+    size_t rule_func_index = 0;
+
+    size_t clause_count = 0;
+    Clause** clauses = nullptr;
+
+    ~Graph() {
+        if (vars != nullptr) {
+            for (size_t i = 0; i < var_count; i++) {
+                safe_free(vars[i]);
+            }
+            safe_free(vars);
+        }
+        if (funcs != nullptr) {
+            for (size_t i = 0; i < func_count; i++) {
+                safe_free(funcs[i]);
+            }
+            safe_free(funcs);
+        }
+        if (clauses != nullptr) {
+            for (size_t i = 0; i < clause_count; i++) {
+                safe_free(clauses[i]);
+            }
+            safe_free(clauses);
+        }
+    }
+
+    inline bool gc_is_var(GridCell cell) const {
+        return cell >= max_states;
+    }
+
+    const GridCell* get_rule_func() const {
+        ClauseFunc* func = funcs[rule_func_index];
+        if (func->var_count != 10) {
+            error("Rule function must have 10 inputs");
+        }
+        if (func->type != ClauseFunc::Type::LOOKUP_TABLE) {
+            error("Rule function must be a lookup table");
+        }
+        return const_cast<const GridCell*>(func->data.lookup_table.table);
+    }
+
+    bool is_multi_rule() const {
+        const GridCell* data = get_rule_func();
+        for (int i = 0; i < 1024; i++) {
+            if (data[i] >= max_states) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+};
+
+
 struct Options {
 
-    enum class Backend {CNF, VLS};
-    Backend backend;
+    enum class Backend {NONE, CNF, VLS};
+    Backend backend = Backend::NONE;
 
     size_t search_order_list_len = 0;
     // format: t, x, y
@@ -57,47 +122,14 @@ class ULP {
 
 public:
 
-    bool multi_rule = false;
-
-    uint64_t max_states = 0;
-
-    size_t var_count = 0;
-    Variable** vars = nullptr;
-
-    size_t func_count = 0;
-    ClauseFunc** funcs = nullptr;
-    size_t rule_func_index = 0;
-
-    size_t clause_count = 0;
-    Clause** clauses = nullptr;
+    Graph* graph;
 
     Grid grid = Grid(0, 0, 0);
 
     Options& options;
 
-    ULP(Options& options) : options(options) {
-        // do nothing
-    }
-
-    ~ULP() {
-        if (vars != nullptr) {
-            for (size_t i = 0; i < var_count; i++) {
-                safe_free(vars[i]);
-            }
-            safe_free(vars);
-        }
-        if (funcs != nullptr) {
-            for (size_t i = 0; i < func_count; i++) {
-                safe_free(funcs[i]);
-            }
-            safe_free(funcs);
-        }
-        if (clauses != nullptr) {
-            for (size_t i = 0; i < clause_count; i++) {
-                safe_free(clauses[i]);
-            }
-            safe_free(clauses);
-        }
+    ULP(Graph* graph, Options& options) : options(options) {
+        this->graph = graph;
     }
 
     // UNFINISHED
@@ -126,28 +158,13 @@ public:
     //     clause_count = other.clause_count;
     // }
 
-    inline bool gc_is_var(GridCell cell) const {
-        return cell >= max_states;
-    }
-
-    const GridCell* get_rule_func() const {
-        ClauseFunc* func = funcs[rule_func_index];
-        if (func->var_count != 10) {
-            error("Rule function must have 10 inputs");
-        }
-        if (func->type != ClauseFunc::Type::LOOKUP_TABLE) {
-            error("Rule function must be a lookup table");
-        }
-        return const_cast<const GridCell*>(func->data.lookup_table.table);
-    }
-
     void sync_search_grid() {
         for (size_t t = 0; t < grid.gens; t++) {
             for (size_t y = 0; y < grid.height; y++) {
                 for (size_t x = 0; x < grid.width; x++) {
                     GridCell value = grid[t, x, y];
-                    if (gc_is_var(value)) {
-                        Variable& var = *vars[value];
+                    if (graph->gc_is_var(value)) {
+                        Variable& var = *graph->vars[value];
                         if (var.is_known()) {
                             grid[t, x, y] = vv_to_gc(var.value);
                         }
@@ -347,26 +364,29 @@ private:
     }
 
     void parse_graph_line() {
+        Graph& graph = *this->out.graph;
         size_t v_size;
-        if (read_line("var_count = %zu", &v_size)) {
-            out.var_count = v_size;
+        if (read_line("max_states = %zu", &v_size)) {
+            graph.max_states = v_size;
+        } else if (read_line("var_count = %zu", &v_size)) {
+            graph.var_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.vars = safe_realloc(out.vars, v_size);
+            graph.vars = safe_realloc(graph.vars, v_size);
             // fill in the implicit vars
-            for (size_t i = 0; i < out.max_states; i++) {
+            for (size_t i = 0; i < graph.max_states; i++) {
                 Variable* var = safe_malloc<Variable>(1, sizeof(Variable));
                 var->number = i;
                 var->value = gc_to_vv(i);
                 var->use_count = 0;
-                out.vars[i] = var;
+                graph.vars[i] = var;
             }
         } else if (read_line("funcs : %zu", &v_size)) {
-            if (out.vars == nullptr) {
+            if (graph.vars == nullptr) {
                 ulp_error("funcs provided before var_count");
             }
-            out.func_count = v_size;
+            graph.func_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.funcs = safe_realloc<ClauseFunc*>(out.funcs, v_size);
+            graph.funcs = safe_realloc<ClauseFunc*>(graph.funcs, v_size);
             for (size_t i = 0; i < v_size; i++) {
                 size_t var_count;
                 if (!read_item("%zu", &var_count)) {
@@ -384,7 +404,7 @@ private:
                         }
                         func->data.lookup_table.table[i] = value;
                     }
-                    out.funcs[i] = func;
+                    graph.funcs[i] = func;
                 } else {
                     ulp_error("Invalid type for clause func %zu", i);
                 }
@@ -393,9 +413,9 @@ private:
                 }
             }
         } else if (read_line("rule_func_index = %zu", &v_size)) {
-            out.rule_func_index = v_size;
+            graph.rule_func_index = v_size;
         } else if (read_line("clauses : %zu", &v_size)) {
-            if (out.vars == nullptr) {
+            if (graph.vars == nullptr) {
                 ulp_error("clauses provided before var_count");
             }
             // determine variable use counts first
@@ -424,27 +444,27 @@ private:
             }
             e_fseek(start, SEEK_SET);
             // now allocate the variables
-            for (size_t i = out.max_states; i < out.var_count; i++) {
+            for (size_t i = graph.max_states; i < graph.var_count; i++) {
                 Variable* var = safe_malloc<Variable>(1, sizeof(Variable) + use_counts[i] * sizeof(VarUse));
                 var->number = i;
                 var->value = VV_UNKNOWN;
                 // set it to 0 so the next part can increment it to track how many have been assigned
                 var->use_count = 0;
-                out.vars[i] = var;
+                graph.vars[i] = var;
             }
             // finally, do the clauses
-            out.clause_count = v_size;
+            graph.clause_count = v_size;
             // realloc behaves like malloc for null pointers
-            out.clauses = safe_realloc(out.clauses, v_size);
-            for (size_t i = 0; i < out.clause_count; i++) {
+            graph.clauses = safe_realloc(graph.clauses, v_size);
+            for (size_t i = 0; i < graph.clause_count; i++) {
                 size_t func_number;
                 if (!read_item("%zu", &func_number)) {
                     ulp_error("No func number provided for clause %zu", i);
                 }
-                if (func_number >= out.func_count) {
+                if (func_number >= graph.func_count) {
                     ulp_error("Invalid func number provided for clause %zu: %zu", i, func_number);
                 }
-                ClauseFunc* func = out.funcs[func_number];
+                ClauseFunc* func = graph.funcs[func_number];
                 size_t var_count;
                 if (!read_item("%zu", &var_count)) {
                     ulp_error("No variable count provided for clause %zu", i);
@@ -459,9 +479,9 @@ private:
                     if (!read_item("%zu", &var_number)) {
                         ulp_error("Variable %zu for clause %zu is missing or invalid", j, i);
                     }
-                    Variable* var = out.vars[var_number];
+                    Variable* var = graph.vars[var_number];
                     clause->vars[j] = var;
-                    if (var_number >= out.max_states) {
+                    if (var_number >= graph.max_states) {
                         VarUse& use = var->uses[var->use_count];
                         use.clause = clause;
                         use.change = POWERS_OF_3[j];
@@ -471,7 +491,7 @@ private:
                 if (!read_line("")) {
                     ulp_error("Extra non-whitespace characters at end of clause func");
                 }
-                out.clauses[i] = clause;
+                graph.clauses[i] = clause;
             }
         } else {
             ulp_error("Invalid line in [GRAPH]");
@@ -574,11 +594,7 @@ public:
             if (!eat_whitespace()) {
                 break;
             }
-            size_t v_size;
-            if (read_line("max_states = %zu", &v_size)) {
-                out.max_states = v_size;
-                section = NONE;
-            } else if (read_line("[ GRAPH ]")) {
+            if (read_line("[ GRAPH ]")) {
                 section = GRAPH;
             } else if (read_line("[ GRID ]")) {
                 section = GRID;

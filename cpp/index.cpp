@@ -16,14 +16,15 @@
 
 
 void run_search(Search& search) {
-    Options& options = search.options;
     ULP& ulp = search.ulp;
+    Graph& graph = *ulp.graph;
+    Options& options = search.options;
     search.branches = 0;
     search.solutions_found = 0;
     search.set_unknown_vars = 0;
     search.start_unknown_vars = 0;
-    for (size_t i = 0; i < ulp.var_count; i++) {
-        if (!ulp.vars[i]->is_known()) {
+    for (size_t i = 0; i < graph.var_count; i++) {
+        if (!graph.vars[i]->is_known()) {
             search.start_unknown_vars++;
         }
     }
@@ -31,10 +32,12 @@ void run_search(Search& search) {
     search.start_time = time;
     search.last_progress_shown_time = time;
     search.last_max_partial_shown_time = time;
-    if (true || options.backend == Options::Backend::VLS) {
+    if (options.backend == Options::Backend::VLS) {
         vls::run_search();
-    } else {
+    } else if (options.backend == Options::Backend::CNF) {
         error("CNF searching is not supported yet");
+    } else {
+        error("No backend provided");
     }
     search.print_max_partial_at_end();
 }
@@ -43,8 +46,8 @@ int main(int argc, [[maybe_unused]] char** argv) {
     calibrate_time();
     std::atexit(Grid::destroy);
     // mark as static so destructor is called on exit()
-    static Options options;
-    static Search search = Search(options);
+    static Graph graph;
+    static Search search = Search(&graph);
     ULP& ulp = search.ulp;
     errno = 0;
     #if IN_BROWSER
@@ -65,12 +68,12 @@ int main(int argc, [[maybe_unused]] char** argv) {
     ULPParser parser = ULPParser(ulp, file);
     parser.parse();
     fclose(file);
-    printf("Loaded search: %zu variables, %zu clauses\n", ulp.var_count - ulp.max_states, ulp.clause_count);
+    printf("Loaded search: %zu variables, %zu clauses\n", graph.var_count - graph.max_states, graph.clause_count);
     debug(1, search.print_grid(stdout));
     vls::load_search(search);
-    vls::init_implications(ulp);
+    vls::init_implications();
     vls::preprocess();
-    printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count - ulp.max_states, ulp.clause_count);
+    printf("Preprocessing complete: %zu variables, %zu clauses\n", graph.var_count - graph.max_states, graph.clause_count);
     debug(1, search.print_grid(stdout));
     run_search(search);
 }

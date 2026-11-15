@@ -30,13 +30,13 @@ Whitespace is not significant unless it is being used to separate two alphanumer
 
 There are two basic entities that can be set in a file, "keys" and "lists". Keys have a single value and are assigned by an equals sign, while lists are followed by a colon, the length of the list, a newline, and then a newline-separated list of values. Boolean keys are provided as either 0 or 1.
 
-Before any of the sections, the `max_states = <integer>` key must be defined to be a positive integer greater than or equal to 2, which is the state count being used. In the format, cells are often needed. `max_states` specifies the format of these integers. Integers from `0` to `max_states - 1` encode that cell state, while positive integers `max_state` and above mean variable `value - max_state + 1`, so `max_state` means variable 1, `max_state + 1` means variable 2, and so on.
-
 ### `[GRAPH]` section
 
 This section specifies the abstract clause graph, aka the actual problem being solved. The core data is a list of clauses of n variables; each clause is mapped to a clause function of n variables. The clause functions specify a mapping between data and its satisfiability/unsatisfiability implication (which may itself be a variable; this enables multi-rule searching).
 
 For simple searches in the INT rulespace there is generally only one clause function that maps to the rule, it is of 10 variables specifying the next value of the cell, the cell itself, and its 8 neighbors, returning SAT if the transition is possible and UNSAT if it isn't.
+
+The `max_states = <integer>` key must be set to be a positive integer greater than or equal to 2, which is the state count being used. In the format, cells are often needed. `max_states` specifies the format of these integers. Integers from `0` to `max_states - 1` encode that cell state, while positive integers `max_state` and above mean variable `value - max_state + 1`, so `max_state` means variable 1, `max_state + 1` means variable 2, and so on.
 
 The `var_count = <number>` key must be set, this is the number of variables that the problem uses. This includes the implicit state variables, so it's 2 for a 0-variable problem when `max_states` is 2.
 

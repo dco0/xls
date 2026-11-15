@@ -62,8 +62,8 @@ inline void implicstate_and(ImplicState x, const ImplicState y) {
     }
 }
 
-void init_implicstate_masks(const ULP& ulp) {
-    const GridCell* rule_func = ulp.get_rule_func();
+void init_implicstate_masks() {
+    const GridCell* rule_func = graph->get_rule_func();
     for (int i = 0; i < 1024; i++) {
         if (rule_func[i] == 1) {
             implicstate_set_bit(full_implic_state, i, 0);
@@ -171,14 +171,14 @@ void init_clause_implication_tr(Clause& clause) {
     debug(4, printf("Implication transition for clause %zu: %ti\n", clause.number, clause.implication_pointer - implication_table));
 }
 
-void init_implications(ULP& ulp) {
-    init_implicstate_masks(ulp);
+void init_implications() {
+    init_implicstate_masks();
     implication_table = safe_malloc<uint64_t>(59049);
     for (uint32_t tr = 0; tr < 59049; tr++) {
         implication_table[tr] = get_implications_for_tr(tr);
     }
-    for (size_t i = 0; i < ulp.clause_count; i++) {
-        init_clause_implication_tr(*ulp.clauses[i]);
+    for (size_t i = 0; i < graph->clause_count; i++) {
+        init_clause_implication_tr(*graph->clauses[i]);
     }
 }
 
