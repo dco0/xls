@@ -204,6 +204,7 @@ size_t run_depth(size_t depth) {
 
 void run_search(void) {
     debug(2, printf("Running search\n"));
+    get_search_order_list();
     progress.clear();
     all_zeros = true;
     run_depth(0);

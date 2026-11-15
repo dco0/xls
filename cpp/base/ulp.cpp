@@ -356,7 +356,7 @@ private:
             for (size_t i = 0; i < out.max_states; i++) {
                 Variable* var = safe_malloc<Variable>(1, sizeof(Variable));
                 var->number = i;
-                var->value = i;
+                var->value = gc_to_vv(i);
                 var->use_count = 0;
                 out.vars[i] = var;
             }

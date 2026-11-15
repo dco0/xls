@@ -65,7 +65,7 @@ inline void implicstate_and(ImplicState x, const ImplicState y) {
 void init_implicstate_masks(const ULP& ulp) {
     const GridCell* rule_func = ulp.get_rule_func();
     for (int i = 0; i < 1024; i++) {
-        if (rule_func[i] == 0) {
+        if (rule_func[i] == 1) {
             implicstate_set_bit(full_implic_state, i, 0);
         } else {
             // 1 for both SAT and multi-rule
@@ -168,7 +168,7 @@ void init_clause_implication_tr(Clause& clause) {
     for (size_t i = 0; i < clause.var_count; i++) {
         clause.implication_pointer += clause.vars[i]->value * POWERS_OF_3[i];
     }
-    debug(4, printf("Transition for clause %zu: %ti\n", clause.number, clause.implication_pointer - implication_table));
+    debug(4, printf("Implication transition for clause %zu: %ti\n", clause.number, clause.implication_pointer - implication_table));
 }
 
 void init_implications(ULP& ulp) {
@@ -238,6 +238,7 @@ inline bool check_clause_implications(Clause& clause) {
     debug(4, printf("Implication for clause %zu: transition = %ti, code = %" PRIu64 "\n", clause.number, clause.implication_pointer - implication_table, code));
     if (code == 1) {
         debug(3, printf("Contradiction in check_implications\n"));
+        search->print_grid(stdout);
         return false;
     }
     while (code != 0) {

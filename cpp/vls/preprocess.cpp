@@ -156,6 +156,7 @@ private:
     const char* current_step;
 
     [[noreturn]] void contradiction(const char* format, ...) {
+        search->print_grid(stdout);
         real_printf("Contradiction found in preprocessing (in step %s):\n", current_step);
         va_list args;
         va_start(args, format);
@@ -343,7 +344,7 @@ private:
             bool can_be_1 = internal_check_implications(var, gc_to_vv(1));
             debug(2, printf("Implications for variable %zu: can_be_0 = %i, can_be_1 = %i\n", var.number, can_be_0, can_be_1));
             if (!can_be_0 && !can_be_1) {
-                contradiction("Variable %zu is unsettable\n", var.value);
+                contradiction("Variable %zu is unsettable\n", var.number);
             } else if (!can_be_0 && can_be_1) {
                 changes_made = true;
                 set_variable_and_propagate(var, gc_to_vv(1), true);
@@ -496,7 +497,7 @@ public:
         if (!found) {
             unexpected_error("Preprocessing did not finish");
         }
-        if (ulp.var_count == 0) {
+        if (ulp.var_count <= ulp.max_states) {
             solutions::check(*search, true);
             return true;
         }

@@ -65,12 +65,12 @@ int main(int argc, [[maybe_unused]] char** argv) {
     ULPParser parser = ULPParser(ulp, file);
     parser.parse();
     fclose(file);
-    printf("Loaded search: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
+    printf("Loaded search: %zu variables, %zu clauses\n", ulp.var_count - ulp.max_states, ulp.clause_count);
     debug(1, search.print_grid(stdout));
     vls::load_search(search);
     vls::init_implications(ulp);
     vls::preprocess();
-    printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
+    printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count - ulp.max_states, ulp.clause_count);
     debug(1, search.print_grid(stdout));
     run_search(search);
 }

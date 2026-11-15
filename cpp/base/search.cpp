@@ -21,7 +21,7 @@ extern int nanosleep(const struct timespec *__requested_time, struct timespec *_
 
 
 inline void print_grid_cell_pretty(const ULP& ulp, GridCell value) {
-    const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    static const char* RLE_CHARS = ".ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     if (ulp.max_states >= 3) {
         if (!ulp.gc_is_var(value)) {
             real_printf("%c", RLE_CHARS[value]);
