@@ -12,7 +12,6 @@ export type Cell = number;
 
 export const OFF = 0;
 export const ON = 1;
-export const UNKNOWN = -1;
 
 
 export class LookupTableClauseFunc {
@@ -368,41 +367,57 @@ export class Grid implements GridLike {
         };
     }
 
-    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: GridCell): void {
+    expand({top = 0, bottom = 0, left = 0, right = 0, start = 0, end = 0}: {top?: number, bottom?: number, left?: number, right?: number, start?: number, end?: number}, value: GridCell | (() => GridCell)): void {
         let newWidth = this.width + left + right;
         let newHeight = this.height + top + bottom;
         let newGens = this.gens + start + end;
         // first make empty placeholders
-        let emptyRow: GridCell[] = [];
-        for (let i = 0; i < newWidth; i++) {
-            emptyRow.push(value.copy());
-        }
-        let emptyLayer: GridCell[][] = [];
-        for (let i = 0; i < newHeight; i++) {
-            emptyLayer.push(emptyRow.map(cell => cell.copy()));
-        }
         // then paste them in
         for (let layer of this.data) {
             for (let row of layer) {
-                for (let i = 0; i < left; i++) {
-                    row.unshift(value.copy());
+                for (let x = 0; x < left; x++) {
+                    row.unshift(typeof value === 'function' ? value() : value.copy());
                 }
-                for (let i = 0; i < right; i++) {
-                    row.push(value.copy());
+                for (let x = 0; x < right; x++) {
+                    row.push(typeof value === 'function' ? value() : value.copy());
                 }
             }
-            for (let i = 0; i < top; i++) {
-                layer.unshift(emptyRow.map(cell => cell.copy()));
+            for (let y = 0; y < top; y++) {
+                let row: GridCell[] = [];
+                for (let x = 0; x < newWidth; x++) {
+                    row.push(typeof value === 'function' ? value() : value.copy());
+                }
+                layer.unshift(row);
             }
             for (let i = 0; i < bottom; i++) {
-                layer.push(emptyRow.map(cell => cell.copy()));
+                let row: GridCell[] = [];
+                for (let x = 0; x < newWidth; x++) {
+                    row.push(typeof value === 'function' ? value() : value.copy());
+                }
+                layer.push(row);
             }
         }
-        for (let i = 0; i < start; i++) {
-            this.data.unshift(emptyLayer.map(row => row.map(cell => cell.copy())));
+        for (let t = 0; t < start; t++) {
+            let layer: GridCell[][] = [];
+            for (let y = 0; y < newHeight; y++) {
+                let row: GridCell[] = [];
+                for (let x = 0; x < newWidth; x++) {
+                    row.push(typeof value === 'function' ? value() : value.copy());
+                }
+                layer.push(row);
+            }
+            this.data.unshift(layer);
         }
-        for (let i = 0; i < end; i++) {
-            this.data.push(emptyLayer.map(row => row.map(cell => cell.copy())));
+        for (let t = 0; t < end; t++) {
+            let layer: GridCell[][] = [];
+            for (let y = 0; y < newHeight; y++) {
+                let row: GridCell[] = [];
+                for (let x = 0; x < newWidth; x++) {
+                    row.push(typeof value === 'function' ? value() : value.copy());
+                }
+                layer.push(row);
+            }
+            this.data.push(layer);
         }
         this.width = newWidth;
         this.height = newHeight;
@@ -931,19 +946,21 @@ export class ULP {
         }
     }
 
-    resolveNegativeOneUnknowns(): void {
-        for (let cell of this.grid.cells()) {
-            if (cell.value === UNKNOWN) {
-                cell.value = this.getNewVar();
-            }
-        }
-    }
-
     removeUnusedVars(): void {
         this.varCount = 0;
         let mapping: {[key: number]: number} = {};
         for (let i = 0; i < this.maxStates; i++) {
             mapping[i] = i;
+        }
+        for (let gridCell of this.grid.cells()) {
+            let cell = gridCell.value;
+            if (cell in mapping) {
+                gridCell.value = mapping[cell];
+            } else {
+                let value = this.getNewVar();
+                gridCell.value = value;
+                mapping[cell] = value;
+            }
         }
         for (let clause of this.clauses) {
             for (let i = 0; i < clause.data.length; i++) {
@@ -957,20 +974,9 @@ export class ULP {
                 }
             }
         }
-        for (let gridCell of this.grid.cells()) {
-            let cell = gridCell.value;
-            if (cell in mapping) {
-                gridCell.value = mapping[cell];
-            } else {
-                let value = this.getNewVar();
-                gridCell.value = value;
-                mapping[cell] = value;
-            }
-        }
     }
 
     normalize(): void {
-        this.resolveNegativeOneUnknowns();
         this.removeUnusedVars();
     }
 

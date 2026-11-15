@@ -1,10 +1,13 @@
 
 import * as fs from 'node:fs/promises';
 import {normalize, join} from 'node:path';
+import {execSync} from 'node:child_process';
+
+import {parseSpeed} from '../lifeweb/lib/index.js';
 
 import {XLSError, ULP} from './base.js';
-import {runScriptFromFile} from './scripts.js';
-import { execSync } from 'node:child_process';
+import {runScript, runScriptFromFile} from './scripts.js';
+import {periodicMode} from './modes.js';
 
 
 const HELP_PREFIX = `
@@ -248,7 +251,43 @@ if (posArgs[0] === 'script') {
 
 const MODES = ['periodic'];
 
-let rule = posArgs[0];
+let minRule = posArgs[0];
+let maxRule: string | undefined = undefined;
 let mode = posArgs[1];
+posArgs = posArgs.slice(2);
+if (!MODES.includes(mode)) {
+    maxRule = mode;
+    mode = posArgs[0];
+    posArgs = posArgs.slice(1);
+}
 
-throw new XLSError(`Invalid invocation of XLS`);
+let script: string;
+
+if (mode === 'periodic') {
+
+    if (posArgs.length !== 3) {
+        throw new XLSError(`Expected 3 positional arguments for periodic mode, got ${posArgs.length} arguments`);
+    }
+    let {dx, dy, period} = parseSpeed(posArgs[0]);
+    let width = Number(posArgs[1]);
+    if (!Number.isInteger(width) || width < 0) {
+        throw new XLSError(`Invalid width: '${posArgs[1]}'`);
+    }
+    let height = Number(posArgs[2]);
+    if (!Number.isInteger(height) || height < 0) {
+        throw new XLSError(`Invalid width: '${posArgs[1]}'`);
+    }
+    script = periodicMode(dx, dy, period, width, height);
+
+} else {
+    throw new XLSError(`Invalid mode: '${mode}'`);
+}
+
+if (maxRule !== undefined) {
+    script = `set_rule("${minRule}", "${maxRule}");\n${script}`;
+} else {
+    script = `set_rule("${minRule}");\n${script}`;
+}
+
+let ulp = await runScript(script);
+await searchForULP(ulp);

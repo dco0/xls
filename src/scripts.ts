@@ -1,6 +1,6 @@
 
 import {LifewebError, IdentityPattern, MAPPattern, MAPB0Pattern, createPattern} from '../lifeweb/lib/core/index.js';
-import {XLSError, Cell, OFF, ON, UNKNOWN, ClauseFunc, Coord, GridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
+import {XLSError, Cell, OFF, ON, ClauseFunc, Coord, GridCell, GridLike, Grid, GridSlice, ULP} from './base.js';
 
 
 interface Position {
@@ -875,7 +875,7 @@ class XLSScriptParser {
             } else if (token.value === 'on') {
                 value = ON;
             } else if (token.value === 'unknown') {
-                value = UNKNOWN;
+                value = -1;
             } else {
                 value = this.ulp.getNewVar();
             }
@@ -1491,11 +1491,7 @@ class XLSScriptRunner {
                 let cell = vars[(t + baseT) % vars.length];
                 let old = grid.get(t, x, y);
                 old.func = value.func;
-                if (old.value === -1) {
-                    old.value = cell;
-                } else {
-                    this.wrappedReassign(pos, old.value, cell, new Coord(t, x, y));
-                }
+                this.wrappedReassign(pos, old.value, cell, new Coord(t, x, y));
             }
             return;
         }
@@ -1507,11 +1503,11 @@ class XLSScriptRunner {
             } else if (value.kind === 'cell') {
                 let old = grid.get(t, x, y);
                 old.func = value.cell.func;
-                if (old.value === -1) {
-                    old.value = value.cell.value;
-                } else {
-                    this.wrappedReassign(pos, old.value, value.cell.value, new Coord(t, x, y));
+                let setTo = value.cell.value;
+                if (setTo === -1) {
+                    setTo = this.ulp.getNewVar();
                 }
+                this.wrappedReassign(pos, old.value, setTo, new Coord(t, x, y));
             } else {
                 throw new Error(`This error should not occur (invalid cell specifier: ${value satisfies never})`);
             }
@@ -1548,7 +1544,7 @@ class XLSScriptRunner {
                     return `off`;
                 } else if (cell === ON) {
                     return `on`;
-                } else if (cell === UNKNOWN) {
+                } else if (cell === -1) {
                     return `unknown`;
                 } else {
                     return `var(${cell})`;
@@ -1656,26 +1652,27 @@ class XLSScriptRunner {
                 if (!(grid instanceof Grid)) {
                     this.error(pos, 'TypeError', `Cannot change dimensions of grid slice (the dimensions of a normal grid can be changed)`);
                 }
+                let ruleFunc = this.getCurrentDefaultRuleFunc(pos);
                 if (left.key === 'width') {
                     let amount = value - grid.width;
                     if (amount < 0) {
                         grid.shrink({right: -amount});
                     } else {
-                        grid.expand({right: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({right: amount}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
                     }
                 } else if (left.key === 'height') {
                     let amount = value - grid.height;
                     if (amount < 0) {
                         grid.shrink({bottom: -amount});
                     } else {
-                        grid.expand({bottom: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({bottom: amount}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
                     }
                 } else {
                     let amount = value - grid.gens;
                     if (amount < 0) {
                         grid.shrink({end: -amount});
                     } else {
-                        grid.expand({end: amount}, new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(pos)));
+                        grid.expand({end: amount}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
                     }
                 }
             }
@@ -2139,12 +2136,12 @@ class XLSScriptRunner {
             if (grid instanceof GridSlice) {
                 this.error(gridValue, 'TypeError', `RLE too big for grid slice (grid slices are not expandable, normal grids are)`);
             }
-            let cell = new GridCell(UNKNOWN, this.getCurrentDefaultRuleFunc(node.rle));
+            let ruleFunc = this.getCurrentDefaultRuleFunc(node.rle);
             if (width > grid.width) {
-                grid.expand({right: width - grid.width}, cell);
+                grid.expand({right: width - grid.width}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
             }
             if (height > grid.height) {
-                grid.expand({bottom: width - grid.height}, cell);
+                grid.expand({bottom: width - grid.height}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
             }
         }
         for (let y = 0; y < p.height; y++) {
@@ -2351,8 +2348,11 @@ function addBuiltinFunction(to: 'global' | Exclude<ValueType, 'null'> | Exclude<
 
 // global functions
 
-addBuiltinFunction('global', 'set_rule', ['rule'], function(pos: Position, _rule?: Value): Value {
-    let rule = this.assertArgType(_rule, 'string', 'rule');
+addBuiltinFunction('global', 'set_rule', ['minrule', 'maxrule'], function(pos: Position, _minrule?: Value, _maxrule?: Value): Value {
+    let rule = this.assertArgType(_minrule, 'string', 'rule');
+    if (_maxrule !== undefined) {
+        this.error(rule, 'ValueError', `Multi-rule searching is not supported yet`);
+    }
     let p = createPattern(getStringValue(rule));
     let trs: Uint8Array;
     if (p instanceof MAPPattern) {
@@ -2378,7 +2378,7 @@ addBuiltinFunction('grid', 'apply_wrap', ['dx', 'dy'], function(pos: Position, _
     let dx = this.assertArgType(_dx, 'number', 'dx').value;
     let dy = this.assertArgType(_dy, 'number', 'dy').value;
     let ruleFunc = this.getCurrentDefaultRuleFunc(pos);
-    grid.expand({end: 1}, new GridCell(UNKNOWN, ruleFunc));
+    grid.expand({end: 1}, () => new GridCell(this.ulp.getNewVar(), ruleFunc));
     for (let endY = 0; endY < grid.height; endY++) {
         for (let endX = 0; endX < grid.width; endX++) {
             let startX = endX - dx;
