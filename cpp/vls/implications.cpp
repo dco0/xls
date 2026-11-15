@@ -196,7 +196,7 @@ bool set_variable(Variable& var, VarValue value) {
     }
     debug(4, printf("Setting variable %zu, value = %i, prev_value = %i\n", var.number, value, var.value));
     var.value = value;
-    if (value == gc_to_vv(0)) {
+    if (value == 1) {
         for (size_t i = 0; i < var.use_count; i++) {
             VarUse& data = var.uses[i];
             data.clause->implication_pointer += data.change;
@@ -213,8 +213,11 @@ bool set_variable(Variable& var, VarValue value) {
 
 // returns false if contradiction, true if no contradiction
 void unset_variable(Variable& var) {
+    if (var.value == VV_UNKNOWN) {
+        return;
+    }
     debug(4, printf("Unsetting variable %zu: prev_value = %i\n", var.number, var.value));
-    if (var.value == gc_to_vv(0)) {
+    if (var.value == 1) {
         for (size_t i = 0; i < var.use_count; i++) {
             VarUse& data = var.uses[i];
             data.clause->implication_pointer -= data.change;
