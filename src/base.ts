@@ -59,7 +59,7 @@ export class Clause {
     }
 
     toString(): string {
-        return `${this.ulp.funcs.indexOf(this.func)} ${this.data.join(' ')}`;
+        return `${this.ulp.funcs.indexOf(this.func)} ${this.data.length} ${this.data.join(' ')}`;
     }
 
     copy(ulp?: ULP, func?: LookupTableClauseFunc): Clause {
@@ -809,12 +809,12 @@ export class ULP {
             ``,
             `[GRAPH]`,
             ``,
-            `var_count = ${this.varCount}`,
+            `var_count = ${this.varCount + this.maxStates}`,
             ``,
-            `funcs:`,
+            `funcs: ${this.funcs.length}`,
             ...this.funcs.map(func => func.toString()),
             ``,
-            `clauses:`,
+            `clauses: ${this.clauses.length}`,
             ...this.clauses.map(clause => clause.toString()),
             ``,
             `[GRID]`,
@@ -822,6 +822,8 @@ export class ULP {
             `width = ${this.grid.width}`,
             `height = ${this.grid.height}`,
             `gens = ${this.grid.gens}`,
+            ``,
+            `grid: ${this.grid.width * this.grid.height * this.grid.gens}`,
             ``,
             ...this.grid.data.flatMap(layer => {
                 return [
@@ -922,6 +924,7 @@ export class ULP {
                 grid.getAllowOOB(t, x, y + 1)?.value ?? 0,
                 cell.value,
                 grid.getAllowOOB(t, x, y - 1)?.value ?? 0,
+                grid.getAllowOOB(t, x - 1, y + 1)?.value ?? 0,
                 grid.getAllowOOB(t, x - 1, y)?.value ?? 0,
                 grid.getAllowOOB(t, x - 1, y - 1)?.value ?? 0,
             ]);
@@ -970,10 +973,5 @@ export class ULP {
         this.resolveNegativeOneUnknowns();
         this.removeUnusedVars();
     }
-
-}
-
-
-function getSimpleRuleFunc() {
 
 }

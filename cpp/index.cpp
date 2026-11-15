@@ -2,8 +2,11 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
+#include <cstdlib>
 
+#include "base/params.cpp" // IWYU pragma: keep
 #include "base/base.cpp"
+#include "base/grid.cpp"
 #include "base/ulp.cpp"
 #include "base/search.cpp"
 #include "vls/base.cpp"
@@ -28,7 +31,7 @@ void run_search(Search& search) {
     search.start_time = time;
     search.last_progress_shown_time = time;
     search.last_max_partial_shown_time = time;
-    if (options.backend == Options::Backend::VLS) {
+    if (true || options.backend == Options::Backend::VLS) {
         vls::run_search();
     } else {
         error("CNF searching is not supported yet");
@@ -38,6 +41,7 @@ void run_search(Search& search) {
 
 int main(int argc, [[maybe_unused]] char** argv) {
     calibrate_time();
+    std::atexit(Grid::destroy);
     // mark as static so destructor is called on exit()
     static Options options;
     static Search search = Search(options);
@@ -62,9 +66,11 @@ int main(int argc, [[maybe_unused]] char** argv) {
     parser.parse();
     fclose(file);
     printf("Loaded search: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
+    debug(1, search.print_grid(stdout));
+    vls::load_search(search);
     vls::init_implications(ulp);
-    vls::search = &search;
     vls::preprocess();
     printf("Preprocessing complete: %zu variables, %zu clauses\n", ulp.var_count, ulp.clause_count);
+    debug(1, search.print_grid(stdout));
     run_search(search);
 }

@@ -156,7 +156,7 @@ private:
     const char* current_step;
 
     [[noreturn]] void contradiction(const char* format, ...) {
-        printf("Contradiction found in preprocessing (in step %s)\n", current_step);
+        real_printf("Contradiction found in preprocessing (in step %s):\n", current_step);
         va_list args;
         va_start(args, format);
         vprintf(format, args);
@@ -179,13 +179,45 @@ private:
             current_step = nullptr; \
         } while (0)
 
+    void _alias_variable_to_known(Variable& var, Variable& alias_to) {
+        debug(2, printf("Aliasing variable %zu to known variable %zu\n", var.number, alias_to.number));
+        changes_made = true;
+        for (size_t i = 0; i < ulp.grid.total_size; i++) {
+            GridCell cell = ulp.grid.data[i];
+            if (cell == var.number) {
+                cell = alias_to.number;
+            } else if (cell > var.number) {
+                cell--;
+            }
+            ulp.grid.data[i] = cell;
+        }
+        for (size_t i = 0; i < ulp.clause_count; i++) {
+            Clause& clause = *ulp.clauses[i];
+            for (size_t i = 0; i < clause.var_count; i++) {
+                if (clause.vars[i] == &var) {
+                    clause.vars[i] = &alias_to;
+                }
+            }
+            init_clause_implication_tr(clause);
+        }
+        for (size_t i = var.number; i < ulp.var_count - 1; i++) {
+            ulp.vars[i] = ulp.vars[i + 1];
+            ulp.vars[i]->number--;
+        }
+        safe_free(&var);
+        ulp.var_count--;
+    }
+
     void alias_variable(Variable& var, Variable& alias_to) {
-        // this isn't required but it keeps variable numbers down
-        if (alias_to.number > ulp.max_states && var.number > alias_to.number) {
+        if (alias_to.number < ulp.max_states) {
+            _alias_variable_to_known(var, alias_to);
+            return;
+        }
+        if (var.number > alias_to.number) {
             alias_variable(alias_to, var);
             return;
         }
-        debug(2, printf("Aliasing variable %zu to %zu\n", var.number, alias_to.number));
+        debug(2, printf("Aliasing variable %zu to variable %zu\n", var.number, alias_to.number));
         changes_made = true;
         Variable* new_var = safe_malloc<Variable>(1, sizeof(Variable) + (var.use_count + alias_to.use_count) * sizeof(VarUse));
         new_var->number = var.number;
@@ -198,22 +230,26 @@ private:
             new_var->uses[i + var.use_count] = var.uses[i];
         }
         for (size_t i = 0; i < ulp.grid.total_size; i++) {
-            if (ulp.grid.data[i] == var.number || ulp.grid.data[i] == alias_to.number) {
-                ulp.grid.data[i] = new_var->value;
+            GridCell cell = ulp.grid.data[i];
+            if (cell == var.number || cell == alias_to.number) {
+                cell = alias_to.number;
+            } else if (cell > alias_to.number) {
+                cell--;
             }
+            ulp.grid.data[i] = cell;
         }
         for (size_t i = 0; i < ulp.clause_count; i++) {
             Clause& clause = *ulp.clauses[i];
-            for (size_t i = 0; i < clause.var_count; i++) {
-                if (clause.vars[i] == &var || clause.vars[i] == &alias_to) {
-                    clause.vars[i] = new_var;
+            for (size_t j = 0; j < clause.var_count; j++) {
+                if (clause.vars[j] == &var || clause.vars[j] == &alias_to) {
+                    clause.vars[j] = new_var;
                 }
             }
             init_clause_implication_tr(clause);
         }
         ulp.vars[var.number] = new_var;
         safe_free(&var);
-        for (size_t i = alias_to.number; i <= ulp.var_count - 1; i++) {
+        for (size_t i = alias_to.number; i < ulp.var_count - 1; i++) {
             ulp.vars[i] = ulp.vars[i + 1];
             ulp.vars[i]->number--;
         }
@@ -240,7 +276,7 @@ private:
                 }
             }
         }
-        for (size_t i = clause.number; i <= ulp.clause_count - 1; i++) {
+        for (size_t i = clause.number; i < ulp.clause_count - 1; i++) {
             ulp.clauses[i] = ulp.clauses[i + 1];
             ulp.clauses[i]->number--;
         }
@@ -251,7 +287,8 @@ private:
     void normalize_cells() {
         start_step();
         // runs several normalization steps
-        for (size_t i = 1; i <= ulp.var_count; i++) {
+        // start at max_states to avoid running on the known vars
+        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
             Variable& var = *ulp.vars[i];
             // if the cell has a known value then set it to the corresponding cell
             if (var.value != VV_UNKNOWN) {
@@ -297,7 +334,7 @@ private:
         // go through each cell and try setting it to a value
         // if it's a contradiction, then it must be the OTHER value
         // so we can set it to that!
-        for (size_t i = 1; i <= ulp.var_count; i++) {
+        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
             Variable& var = *ulp.vars[i];
             if (var.value != VV_UNKNOWN) {
                 continue;
@@ -306,10 +343,10 @@ private:
             bool can_be_1 = internal_check_implications(var, gc_to_vv(1));
             debug(2, printf("Implications for variable %zu: can_be_0 = %i, can_be_1 = %i\n", var.number, can_be_0, can_be_1));
             if (!can_be_0 && !can_be_1) {
-                contradiction("Variable %zu is unsettable", var.value);
+                contradiction("Variable %zu is unsettable\n", var.value);
             } else if (!can_be_0 && can_be_1) {
                 changes_made = true;
-                set_variable_and_propagate(var, gc_to_vv(0), true);
+                set_variable_and_propagate(var, gc_to_vv(1), true);
                 // reset the stack length to fix dangling pointers caused by set_variable and save space
                 current_stack.len = 0;
             } else if (can_be_0 && !can_be_1) {
@@ -328,9 +365,9 @@ private:
         start_step();
         // if 2 variables have exactly the same arrangement of clauses
         // then alias them together
-        for (size_t i = 1; i <= ulp.var_count; i++) {
+        for (size_t i = ulp.max_states; i < ulp.var_count; i++) {
             Variable& x = *ulp.vars[i];
-            for (size_t j = 1; j < i; j++) {
+            for (size_t j = ulp.max_states; j < i; j++) {
                 Variable& y = *ulp.vars[j];
                 if (x.use_count != y.use_count) {
                     continue;
@@ -369,7 +406,7 @@ private:
                 bool value = check_clause_implications(clause);
                 current_stack.pop_and_undo_frame();
                 if (value == false) {
-                    contradiction("Clause %zu is UNSAT immediately", i);
+                    contradiction("Clause %zu is UNSAT immediately\n", i);
                 } else {
                     remove_clause(clause);
                 }

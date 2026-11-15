@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+// because it's removing the printf macro
+#include <cstdio> // IWYU pragma: keep
 
 #include "params.cpp"
 
@@ -21,30 +23,30 @@
 #define real_fprintf (fprintf)
 #if DEBUG_LEVEL >= 2
     static int debug_depth = 0;
-    #define inc_debug_depth() do { debug_depth++; } while (0)
-    #define dec_debug_depth() do { debug_depth--; } while (0)
-    #define print_line_padding() { \
+    #define inc_debug_depth() do { \
+        debug_depth++; \
+    } while (0)
+    #define dec_debug_depth() do { \
+        debug_depth--; \
+    } while (0)
+    #define print_line_padding() do { \
         for (int i = 0; i < debug_depth; i++) { \
             real_printf(INDENT); \
         } \
-    }
-    #define fprint_line_padding(stream) { \
+    } while (0)
+    #define fprint_line_padding(stream) do { \
         for (int i = 0; i < debug_depth; i++) { \
             real_fprintf(stream, INDENT); \
         } \
-    }
-    #define printf(...) { \
-        for (int i = 0; i < debug_depth; i++) { \
-            real_printf(INDENT); \
-        } \
+    } while (0)
+    #define printf(...) do { \
+        print_line_padding(); \
         real_printf(__VA_ARGS__); \
-    }
-    #define fprintf(stream, ...) { \
-        for (int i = 0; i < debug_depth; i++) { \
-            real_fprintf(stream, INDENT); \
-        } \
+    } while (0)
+    #define fprintf(stream, ...) do { \
+        print_line_padding(); \
         real_fprintf(stream, __VA_ARGS__); \
-    }
+    } while (0)
 #else
     #define inc_debug_depth()
     #define dec_debug_depth()

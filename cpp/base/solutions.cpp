@@ -11,8 +11,8 @@
 #include "base.cpp"
 #include "grid.cpp"
 #include "ulp.cpp"
-#include "search.cpp"
 #include "rule.cpp"
+#include "search.cpp"
 
 
 namespace solutions {
@@ -100,7 +100,7 @@ Hash hash_all_times(const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
-                GridCell value = grid.get(t, x, y);
+                GridCell value = grid[t, x, y];
                 update_hash(out, value);
             }
         }
@@ -130,7 +130,7 @@ Hash hash_all_times_periodic_with_offset(const ULP& ulp, const Grid& grid, size_
         update_hash(out, y_offset);
         for (size_t y = 0; y < shrink_height; y++) {
             for (size_t x = 0; x < shrink_width; x++) {
-                GridCell value = t_grid.get(0, x + offsets.left, y + offsets.top);
+                GridCell value = t_grid[0, x + offsets.left, y + offsets.top];
                 update_hash(out, value);
             }
         }
@@ -191,7 +191,7 @@ bool is_empty([[maybe_unused]] ULP& ulp, const Grid& grid) {
     for (size_t t = 0; t < grid.gens; t++) {
         for (size_t y = 0; y < grid.height; y++) {
             for (size_t x = 0; x < grid.width; x++) {
-                if (grid.get(t, x, y) != 0) {
+                if (grid[t, x, y] != 0) {
                     return false;
                 }
             }

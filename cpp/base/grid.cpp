@@ -68,9 +68,9 @@ private:
         } else {
             current_allocated_bytes += size;
             if (current_allocated_bytes > GRID_CACHE_MAX_MEMORY) {
-
+                clean_cache();
             }
-            return safe_malloc<GridCell>();
+            return safe_malloc<GridCell>(size);
         }
     }
 
@@ -126,7 +126,7 @@ public:
         gens = other.gens;
         total_size = other.total_size;
         data = allocate_cells(total_size);
-        memcpy(data, other.data, total_size);
+        memcpy(data, other.data, total_size * sizeof(size_t));
     }
 
     // copy assignment operator
@@ -140,7 +140,7 @@ public:
         gens = other.gens;
         total_size = other.total_size;
         data = allocate_cells(total_size);
-        memcpy(data, other.data, total_size);
+        memcpy(data, other.data, total_size * sizeof(size_t));
         return *this;
     }
 
@@ -172,20 +172,28 @@ public:
         return *this;
     }
 
+    GridCell& operator[](size_t t, size_t x, size_t y) {
+        return data[((t * height) + y) * width + x];
+    }
+
+    const GridCell& operator[](size_t t, size_t x, size_t y) const {
+        return data[((t * height) + y) * width + x];
+    }
+
+    GridCell& at(size_t t, size_t x, size_t y) {
+        return data[((t * height) + y) * width + x];
+    }
+
+    const GridCell& at(size_t t, size_t x, size_t y) const {
+        return data[((t * height) + y) * width + x];
+    }
+
     bool is_nothing() {
         return width == 0 && height == 0 && gens == 0;
     }
 
     bool is_in_bounds(size_t t, size_t x, size_t y) const {
         return t < this->gens && x < this->width && y < this->height;
-    }
-
-    GridCell get(size_t t, size_t x, size_t y) const {
-        return data[((t * height) + y) * width + x];
-    }
-
-    void set(size_t t, size_t x, size_t y, GridCell value) {
-        data[((t * height) + y) * width + x] = value;
     }
 
     bool operator==(const Grid& other) const {
@@ -205,7 +213,7 @@ public:
         for (size_t t = 0; t < gens; t++) {
             for (size_t y = 0; y < height; y++) {
                 for (size_t x = 0; x < width; x++) {
-                    out.set(t, width - x - 1, y, get(t, x, y));
+                    out[t, width - x - 1, y] = at(t, x, y);
                 }
             }
         }
@@ -217,7 +225,7 @@ public:
         for (size_t t = 0; t < gens; t++) {
             for (size_t y = 0; y < height; y++) {
                 for (size_t x = 0; x < width; x++) {
-                    out.set(t, x, height - y - 1, get(t, x, y));
+                    out[t, x, height - y - 1] = at(t, x, y);
                 }
             }
         }
@@ -227,9 +235,9 @@ public:
     Grid rotate_left() const {
         Grid out = Grid(height, width, gens);
         for (size_t t = 0; t < gens; t++) {
-            for (size_t y = 0; y < width; y++) {
-                for (size_t x = 0; x < height; x++) {
-                    out.set(t, height - y - 1, x, get(t, x, y));
+            for (size_t y = 0; y < height; y++) {
+                for (size_t x = 0; x < width; x++) {
+                    out[t, height - y - 1, x] = at(t, x, y);
                 }
             }
         }
@@ -239,9 +247,9 @@ public:
     Grid rotate_right() const {
         Grid out = Grid(height, width, gens);
         for (size_t t = 0; t < gens; t++) {
-            for (size_t y = 0; y < width; y++) {
-                for (size_t x = 0; x < height; x++) {
-                    out.set(t, y, width - x - 1, get(t, x, y));
+            for (size_t y = 0; y < height; y++) {
+                for (size_t x = 0; x < width; x++) {
+                    out[t, y, width - x - 1] = at(t, x, y);
                 }
             }
         }
@@ -253,7 +261,7 @@ public:
         for (size_t t = 0; t < gens; t++) {
             for (size_t y = 0; y < height; y++) {
                 for (size_t x = 0; x < width; x++) {
-                    out.set(t, width - x - 1, height - y - 1, get(t, x, y));
+                    out[t, width - x - 1, height - y - 1] = at(t, x, y);
                 }
             }
         }
@@ -263,9 +271,9 @@ public:
     Grid flip_diagonal() const {
         Grid out = Grid(height, width, gens);
         for (size_t t = 0; t < gens; t++) {
-            for (size_t y = 0; y < width; y++) {
-                for (size_t x = 0; x < height; x++) {
-                    out.set(t, y, x, get(t, x, y));
+            for (size_t y = 0; y < height; y++) {
+                for (size_t x = 0; x < width; x++) {
+                    out[t, y, x] = at(t, x, y);
                 }
             }
         }
@@ -275,9 +283,9 @@ public:
     Grid flip_anti_diagonal() const {
         Grid out = Grid(height, width, gens);
         for (size_t t = 0; t < gens; t++) {
-            for (size_t y = 0; y < width; y++) {
-                for (size_t x = 0; x < height; x++) {
-                    out.set(t, height - y - 1, width - x - 1, get(t, x, y));
+            for (size_t y = 0; y < height; y++) {
+                for (size_t x = 0; x < width; x++) {
+                    out[t, height - y - 1, width - x - 1] = at(t, x, y);
                 }
             }
         }
@@ -288,7 +296,7 @@ public:
         Grid out = Grid(width, height, 1);
         for (size_t y = 0; y < height; y++) {
             for (size_t x = 0; x < width; x++) {
-                out.set(0, x, y, get(t, x, y));
+                out[0, x, y] = at(t, x, y);
             }
         }
         return out;
@@ -302,7 +310,7 @@ public:
         for (size_t t = 0; t < gens; t++) {
             for (size_t y = 0; y < height; y++) {
                 for (size_t x = 0; x < width; x++) {
-                    out.set(t, x, y, get(t + start, x + left, y + top));
+                    out[t, x, y] = at(t + start, x + left, y + top);
                 }
             }
         }
@@ -322,7 +330,7 @@ public:
             bool found = false;
             for (size_t x = 0; x < width; x++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y) != 0) {
+                    if (at(t, x, y) != 0) {
                         found = true;
                         break;
                     }
@@ -342,7 +350,7 @@ public:
             bool found = false;
             for (size_t x = 0; x < width; x++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y - 1) != 0) {
+                    if (at(t, x, y - 1) != 0) {
                         found = true;
                         break;
                     }
@@ -362,7 +370,7 @@ public:
             bool found = false;
             for (size_t y = 0; y < height; y++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x, y) != 0) {
+                    if (at(t, x, y) != 0) {
                         found = true;
                         break;
                     }
@@ -382,7 +390,7 @@ public:
             bool found = false;
             for (size_t y = 0; y < height; y++) {
                 for (size_t t = 0; t < gens; t++) {
-                    if (get(t, x - 1, y) != 0) {
+                    if (at(t, x - 1, y) != 0) {
                         found = true;
                         break;
                     }

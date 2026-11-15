@@ -130,9 +130,9 @@ void get_trs_from_clause_funcs(const ULP& ulp, int* trs, int unknown_tr_value) {
         int j = (i & 273) | ((i >> 2) & 34) | ((i >> 4) & 4) | ((i << 2) & 136) | ((i << 4) & 64);
         GridCell zero = table[(j << 1) | 0];
         GridCell one = table[(j << 1) | 1];
-        if (zero == 1 && one == 0) {
+        if (zero == 0 && one == 1) {
             trs[i] = 0;
-        } else if (zero == 0 && one == 1) {
+        } else if (zero == 1 && one == 0) {
             trs[i] = 1;
         } else {
             trs[i] = unknown_tr_value;
@@ -153,9 +153,8 @@ std::optional<std::string> unparse_transitions(const int* trs, const INTSpec* sp
         int num_letters = 0;
         int total_letters = 0;
         for (int i = 0; i < spec->max_letters_per_num + 1; i++) {
-            signed char letter = spec->letters[number][i];
-            // -1 means that the letters have ran out
-            if (letter == -1) {
+            char letter = spec->letters[number][i];
+            if (letter == '\0') {
                 break;
             }
             total_letters++;

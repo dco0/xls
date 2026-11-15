@@ -15,6 +15,10 @@
 #define DEBUG_LEVEL 6
 #endif
 
+#ifndef PRINT_GRID_ALWAYS_SHOW_VARS
+#define PRINT_GRID_ALWAYS_SHOW_VARS true
+#endif
+
 // maximum number of preprocessing iterations
 static constexpr uintmax_t MAX_PREPROCESSING_ITERATIONS = UINTMAX_C(4096);
 

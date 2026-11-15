@@ -25,7 +25,7 @@ void get_search_order_list() {
     search_order_list.clear();
     for (size_t i = 0; i < options->search_order_list_len; i++) {
         size_t* item = options->search_order_list[i];
-        GridCell cell = ulp->grid.get(item[0], item[1], item[2]);
+        GridCell cell = ulp->grid[item[0], item[1], item[2]];
         Variable* var = ulp->vars[cell];
         search_order_list.push_back(var);
     }
@@ -140,6 +140,8 @@ size_t run_depth(size_t depth) {
             printf("Running depth %zu (variable %zu): ", depth, search_order_list[depth]->number);
         }
         print_progress(stdout);
+        real_printf("\n");
+        search->print_grid(stdout);
     );
     search->branches++;
     if (depth >= search_order_list.size()) {

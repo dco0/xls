@@ -1,6 +1,6 @@
 
 import * as fs from 'node:fs/promises';
-import {join} from 'node:path';
+import {normalize, join} from 'node:path';
 
 import {XLSError, ULP} from './base.js';
 import {runScriptFromFile} from './scripts.js';
@@ -79,10 +79,9 @@ const OPTIONS = [
 
     numberOption('debug', `Sets the debug level`, ['d']),
 
-    flagOption('gcc', 'Use gcc instead of clang'),
     flagOption('gdb', 'Run gdb when running it'),
     flagOption('no-optimize', 'Disable optimization'),
-    flagOption('address-sanitizer', 'Enable address sanitizer (also enables -gcc)', ['asan']),
+    flagOption('address-sanitizer', 'Enable address sanitizer', ['asan']),
 
     stringOption('file', 'Set a file to write the output to', ['f']),
 
@@ -196,14 +195,15 @@ if (options.help) {
 }
 
 
-const BASE_PATH = join(import.meta.dirname, '..');
+const BASE_PATH = normalize(join(import.meta.dirname, '..'));
 function getPath(path: string): string {
-    return join(BASE_PATH, path);
+    return normalize(join(BASE_PATH, path));
 }
 
 async function searchForULP(ulp: ULP): Promise<void> {
     await fs.writeFile(getPath('search.ulp'), ulp.toString());
     let makeCmd = `make -f ${getPath('cpp/Makefile')}`;
+    makeCmd += ` DEBUG_LEVEL=${options['debug'] ?? 0}`;
     if (options['address-sanitizer']) {
         makeCmd += ` ASAN=1`;
     }

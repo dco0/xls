@@ -1,6 +1,7 @@
 
 MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
+DEBUG_LEVEL ?= 0
 ASAN ?= 0
 NO_OPTIMIZE ?= 0
 
@@ -8,6 +9,8 @@ CXX = clang++
 
 CXXFLAGS = -g -fdiagnostics-color=always -std=c++23 -Wall -Werror -Wpedantic -Wextra
 CXXFLAGS += -Wno-gnu-empty-struct -Wno-zero-length-array -Wno-c99-extensions -Wno-flexible-array-extensions -Wno-vla-cxx-extension
+
+CXXFLAGS += -DDEBUG_LEVEL=$(DEBUG_LEVEL)
 
 ifneq ($(NO_OPTIMIZE), 1)
     CXXFLAGS += -O3 -march=native -mtune=native -flto -fvisibility=hidden -fvisibility-inlines-hidden -fno-stack-protector -fomit-frame-pointer

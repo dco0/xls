@@ -1,3 +1,7 @@
-#!/usr/bin/env bash
 
-npx tsc -b
+set -eu -o pipefail
+pushd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" > /dev/null
+
+./node_modules/.bin/tsc -b
+
+popd > /dev/null
